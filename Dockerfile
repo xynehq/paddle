@@ -18,4 +18,5 @@ WORKDIR /app/server
 
 # Run your script
 CMD ["/bin/bash", "server.sh"]
-EXPOSE 8080
+EXPOSE 8000
+EXPOSE 8001
