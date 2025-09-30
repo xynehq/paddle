@@ -9,7 +9,8 @@ services:
     volumes:
       - .:/app                 # mount current dir to /app
     ports:
-      - "8080:8080"            # expose port 8080 from container to host
+      - "8000:8000"            # expose port 8080 from container to host
+      - "8001:8001"
     shm_size: 8g               # equivalent to --shm-size 8g
     init: true                 # equivalent to --init
     deploy:
