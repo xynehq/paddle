@@ -1,0 +1,21 @@
+services:
+  paddlex-server:
+    build:
+      context: .               # build from current dir (Dockerfile + server.sh here)
+      dockerfile: Dockerfile   # optional, defaults to "Dockerfile"
+    container_name: paddlex-server
+    environment:
+      - PADDLEX_HPS_DEVICE_TYPE=gpu
+    volumes:
+      - .:/app                 # mount current dir to /app
+    ports:
+      - "8080:8080"            # expose port 8080 from container to host
+    shm_size: 8g               # equivalent to --shm-size 8g
+    init: true                 # equivalent to --init
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
