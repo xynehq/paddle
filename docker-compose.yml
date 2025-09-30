@@ -22,3 +22,7 @@ services:
               capabilities: [gpu]
     networks:
       - xyne
+
+networks:
+  xyne:
+    external: true
