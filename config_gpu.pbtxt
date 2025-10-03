@@ -1,0 +1,29 @@
+backend: "python"
+max_batch_size: 16
+
+dynamic_batching {
+  preferred_batch_size: [16]         # Triton tries to form these sizes
+  max_queue_delay_microseconds: 1000000   # 1 second wait to accumulate batch
+}
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+output [
+  {
+    name: "output"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+instance_group [
+  {
+      count: 2
+      kind: KIND_GPU
+      gpus: [ 0 ]
+  }
+]
