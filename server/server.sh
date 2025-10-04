@@ -25,4 +25,9 @@ if [ -d shared_mods ]; then
     export PYTHONPATH="$(realpath shared_mods):${PYTHONPATH}"
 fi
 
+# Resolve model_dir entries dynamically based on available local models
+python3 "$(dirname "$0")/resolve_model_dirs.py" \
+    --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
+    --base-dir "/root/.paddlex/official_models"
+
 exec tritonserver --model-repository="${MODEL_REPO_DIR}" --backend-config=python,shm-default-byte-size=104857600,shm-growth-byte-size=10485760 --log-info=1 --log-warning=1 --log-error=1
