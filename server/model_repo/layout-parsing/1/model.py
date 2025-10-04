@@ -1,4 +1,6 @@
 from typing import Any, Dict, Final, List, Tuple
+import gc
+import paddle
 
 from paddlex_hps_server import (
     BaseTritonPythonModel,
@@ -166,7 +168,19 @@ class TritonPythonModel(BaseTritonPythonModel):
                 )
             )
 
-        return schemas.pp_structurev3.InferResult(
+        result_output = schemas.pp_structurev3.InferResult(
             layoutParsingResults=layout_parsing_results,
             dataInfo=data_info,
         )
+
+        # Explicit memory cleanup to prevent GPU memory persistence
+        del file_bytes, images, result, layout_parsing_results
+        gc.collect()
+
+        # Clear PaddlePaddle GPU cache
+        try:
+            paddle.device.cuda.empty_cache()
+        except Exception:
+            pass  # Ignore if not using GPU or paddle not available
+
+        return result_output
