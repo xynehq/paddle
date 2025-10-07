@@ -1,19 +1,24 @@
-
 pipeline_name: PP-StructureV3
 
 batch_size: 8
-
 use_doc_preprocessor: True
-use_seal_recognition: True
+use_seal_recognition: False
 use_table_recognition: True
 use_formula_recognition: True
-use_chart_recognition: True
+use_chart_recognition: False
 use_region_detection: True
+# use_concurrent_processing: False
 
+Serving:
+  extra:
+    max_num_input_imgs: null
 
-Serving:  
-  extra:  
-    max_num_input_imgs: null 
+PREDICT:
+  hpi_config:
+    backend: tensorrt
+    backend_config:
+      precision: "fp16"
+    auto_paddle2onnx: True
 
 SubModules:
   LayoutDetection:
@@ -21,78 +26,105 @@ SubModules:
     model_name: PP-DocLayout_plus-L
     model_dir: null
     batch_size: 8
-    threshold: 
-      0: 0.3  # paragraph_title
-      1: 0.5  # image
-      2: 0.4  # text
-      3: 0.5  # number
-      4: 0.5  # abstract
-      5: 0.5  # content
-      6: 0.5  # figure_table_chart_title
-      7: 0.3  # formula
-      8: 0.5  # table
-      9: 0.5  # reference
-      10: 0.5 # doc_title
-      11: 0.5 # footnote
-      12: 0.5 # header
-      13: 0.5 # algorithm
-      14: 0.5 # footer
-      15: 0.45 # seal
-      16: 0.5 # chart
-      17: 0.5 # formula_number
-      18: 0.5 # aside_text
-      19: 0.5 # reference_content
+    use_hpip: True
+    hpi_config:
+      backend: tensorrt
+      backend_config:
+        precision: "fp16"
+    threshold:
+      0: 0.3
+      1: 0.5
+      2: 0.4
+      3: 0.5
+      4: 0.5
+      5: 0.5
+      6: 0.5
+      7: 0.3
+      8: 0.5
+      9: 0.5
+      10: 0.5
+      11: 0.5
+      12: 0.5
+      13: 0.5
+      14: 0.5
+      15: 0.45
+      16: 0.5
+      17: 0.5
+      18: 0.5
+      19: 0.5
     layout_nms: True
-    layout_unclip_ratio: [1.0, 1.0] 
-    layout_merge_bboxes_mode: 
-      0: "large"  # paragraph_title
-      1: "large"  # image
-      2: "union"  # text
-      3: "union"  # number
-      4: "union"  # abstract
-      5: "union"  # content
-      6: "union"  # figure_table_chart_title
-      7: "large"  # formula
-      8: "union"  # table
-      9: "union"  # reference
-      10: "union" # doc_title
-      11: "union" # footnote
-      12: "union" # header
-      13: "union" # algorithm
-      14: "union" # footer
-      15: "union" # seal
-      16: "large" # chart
-      17: "union" # formula_number
-      18: "union" # aside_text
-      19: "union" # reference_content
+    layout_unclip_ratio: [1.0, 1.0]
+    layout_merge_bboxes_mode:
+      0: "large"
+      1: "large"
+      2: "union"
+      3: "union"
+      4: "union"
+      5: "union"
+      6: "union"
+      7: "large"
+      8: "union"
+      9: "union"
+      10: "union"
+      11: "union"
+      12: "union"
+      13: "union"
+      14: "union"
+      15: "union"
+      16: "large"
+      17: "union"
+      18: "union"
+      19: "union"
+
   ChartRecognition:
     module_name: chart_recognition
     model_name: PP-Chart2Table
     model_dir: null
-    batch_size: 1 
+    batch_size: 1
+    use_hpip: True
+    hpi_config:
+      backend: tensorrt
+      backend_config:
+        precision: "fp16"
+
   RegionDetection:
     module_name: layout_detection
     model_name: PP-DocBlockLayout
     model_dir: null
     layout_nms: True
     layout_merge_bboxes_mode: "small"
+    use_hpip: True
+    hpi_config:
+      backend: tensorrt
+      backend_config:
+        precision: "fp16"
 
 SubPipelines:
   DocPreprocessor:
     pipeline_name: doc_preprocessor
     batch_size: 8
     use_doc_orientation_classify: True
-    use_doc_unwarping: True
+    use_doc_unwarping: False #set this as False as no fp16 or trtion backend available . It was True earlier 
     SubModules:
       DocOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         batch_size: 8
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       DocUnwarping:
         module_name: image_unwarping
         model_name: UVDoc
         model_dir: null
+        use_hpip: True
+        # hpi_config:
+        #   backend: tensorrt
+        #   backend_config:
+        #     precision: "fp16"
 
   GeneralOCR:
     pipeline_name: OCR
@@ -105,6 +137,11 @@ SubPipelines:
         module_name: text_detection
         model_name: PP-OCRv5_server_det
         model_dir: null
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
         limit_side_len: 736
         limit_type: min
         max_side_limit: 4000
@@ -116,49 +153,83 @@ SubPipelines:
         model_name: PP-LCNet_x0_25_textline_ori
         model_dir: null
         batch_size: 8
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       TextRecognition:
         module_name: text_recognition
         model_name: PP-OCRv5_server_rec
         model_dir: null
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
         batch_size: 8
         score_thresh: 0.0
- 
 
   TableRecognition:
     pipeline_name: table_recognition_v2
     use_layout_detection: False
     use_doc_preprocessor: False
     use_ocr_model: False
-    SubModules:  
+    SubModules:
       TableClassification:
         module_name: table_classification
         model_name: PP-LCNet_x1_0_table_cls
         model_dir: null
-
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       WiredTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANeXt_wired
         model_dir: null
-      
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       WirelessTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANet_plus
         model_dir: null
-      
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       WiredTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wired_table_cell_det
         model_dir: null
-      
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
-
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -170,6 +241,11 @@ SubPipelines:
             module_name: text_detection
             model_name: PP-OCRv5_server_det
             model_dir: null
+            use_hpip: True
+            hpi_config:
+              backend: tensorrt
+              backend_config:
+                precision: "fp16"
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -181,10 +257,20 @@ SubPipelines:
             model_name: PP-LCNet_x0_25_textline_ori
             model_dir: null
             batch_size: 8
+            use_hpip: True
+            hpi_config:
+              backend: tensorrt
+              backend_config:
+                precision: "fp16"
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
+            use_hpip: True
+            hpi_config:
+              backend: tensorrt
+              backend_config:
+                precision: "fp16"
             batch_size: 8
         score_thresh: 0.0
 
@@ -205,6 +291,11 @@ SubPipelines:
             module_name: seal_text_detection
             model_name: PP-OCRv4_server_seal_det
             model_dir: null
+            use_hpip: True
+            hpi_config:
+              backend: tensorrt
+              backend_config:
+                precision: "fp16"
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -215,9 +306,14 @@ SubPipelines:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
+            use_hpip: True
+            hpi_config:
+              backend: tensorrt
+              backend_config:
+                precision: "fp16"
             batch_size: 8
             score_thresh: 0
-    
+
   FormulaRecognition:
     pipeline_name: formula_recognition
     batch_size: 8
@@ -228,4 +324,9 @@ SubPipelines:
         module_name: formula_recognition
         model_name: PP-FormulaNet_plus-L
         model_dir: null
+        use_hpip: True
+        hpi_config:
+          backend: tensorrt
+          backend_config:
+            precision: "fp16"
         batch_size: 8
