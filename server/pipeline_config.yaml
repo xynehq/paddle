@@ -19,7 +19,7 @@ SubModules:
   LayoutDetection:
     module_name: layout_detection
     model_name: PP-DocLayout_plus-L
-    model_dir: /root/.paddlex/official_models/PP-DocLayout_plus-L
+    model_dir: null
     batch_size: 8
     threshold: 
       0: 0.3  # paragraph_title
@@ -68,12 +68,12 @@ SubModules:
   ChartRecognition:
     module_name: chart_recognition
     model_name: PP-Chart2Table
-    model_dir: /root/.paddlex/official_models/PP-Chart2Table
+    model_dir: null
     batch_size: 1 
   RegionDetection:
     module_name: layout_detection
     model_name: PP-DocBlockLayout
-    model_dir: /root/.paddlex/official_models/PP-DocBlockLayout
+    model_dir: null
     layout_nms: True
     layout_merge_bboxes_mode: "small"
 
@@ -87,12 +87,12 @@ SubPipelines:
       DocOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
-        model_dir: /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori
+        model_dir: null
         batch_size: 8
       DocUnwarping:
         module_name: image_unwarping
         model_name: UVDoc
-        model_dir: /root/.paddlex/official_models/UVDoc
+        model_dir: null
 
   GeneralOCR:
     pipeline_name: OCR
@@ -104,7 +104,7 @@ SubPipelines:
       TextDetection:
         module_name: text_detection
         model_name: PP-OCRv5_server_det
-        model_dir: /root/.paddlex/official_models/PP-OCRv5_server_det
+        model_dir: null
         limit_side_len: 736
         limit_type: min
         max_side_limit: 4000
@@ -114,12 +114,12 @@ SubPipelines:
       TextLineOrientation:
         module_name: textline_orientation
         model_name: PP-LCNet_x0_25_textline_ori
-        model_dir: /root/.paddlex/official_models/PP-LCNet_x0_25_textline_ori
+        model_dir: null
         batch_size: 8
       TextRecognition:
         module_name: text_recognition
         model_name: PP-OCRv5_server_rec
-        model_dir: /root/.paddlex/official_models/PP-OCRv5_server_rec
+        model_dir: null
         batch_size: 8
         score_thresh: 0.0
  
@@ -133,32 +133,32 @@ SubPipelines:
       TableClassification:
         module_name: table_classification
         model_name: PP-LCNet_x1_0_table_cls
-        model_dir: /root/.paddlex/official_models/PP-LCNet_x1_0_table_cls
+        model_dir: null
 
       WiredTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANeXt_wired
-        model_dir: /root/.paddlex/official_models/SLANeXt_wired
+        model_dir: null
       
       WirelessTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANet_plus
-        model_dir: /root/.paddlex/official_models/SLANet_plus
+        model_dir: null
       
       WiredTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wired_table_cell_det
-        model_dir: /root/.paddlex/official_models/RT-DETR-L_wired_table_cell_det
+        model_dir: null
       
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
-        model_dir: /root/.paddlex/official_models/RT-DETR-L_wireless_table_cell_det
+        model_dir: null
 
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
-        model_dir: /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori
+        model_dir: null
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -169,7 +169,7 @@ SubPipelines:
           TextDetection:
             module_name: text_detection
             model_name: PP-OCRv5_server_det
-            model_dir: /root/.paddlex/official_models/PP-OCRv5_server_det
+            model_dir: null
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -179,12 +179,12 @@ SubPipelines:
           TextLineOrientation:
             module_name: textline_orientation
             model_name: PP-LCNet_x0_25_textline_ori
-            model_dir: /root/.paddlex/official_models/PP-LCNet_x0_25_textline_ori
+            model_dir: null
             batch_size: 8
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
-            model_dir: /root/.paddlex/official_models/PP-OCRv5_server_rec
+            model_dir: null
             batch_size: 8
         score_thresh: 0.0
 
@@ -204,7 +204,7 @@ SubPipelines:
           TextDetection:
             module_name: seal_text_detection
             model_name: PP-OCRv4_server_seal_det
-            model_dir: /root/.paddlex/official_models/PP-OCRv4_server_seal_det
+            model_dir: null
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -214,7 +214,7 @@ SubPipelines:
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
-            model_dir: /root/.paddlex/official_models/PP-OCRv5_server_rec
+            model_dir: null
             batch_size: 8
             score_thresh: 0
     
@@ -227,5 +227,5 @@ SubPipelines:
       FormulaRecognition:
         module_name: formula_recognition
         model_name: PP-FormulaNet_plus-L
-        model_dir: /root/.paddlex/official_models/PP-FormulaNet_plus-L
+        model_dir: null
         batch_size: 8
