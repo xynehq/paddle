@@ -5,7 +5,7 @@ set -e
 export LANG='C.UTF-8'
 export PADDLEX_HPS_LOGGING_LEVEL='INFO'
 
-export PADDLEX_HPS_PIPELINE_CONFIG_PATH="${PADDLEX_HPS_PIPELINE_CONFIG_PATH:-$(realpath pipeline_config.yaml)}"
+export PADDLEX_HPS_PIPELINE_CONFIG_PATH="${PADDLEX_HPS_PIPELINE_CONFIG_PATH:-$(realpath ../pipeline_config.yaml)}"
 
 # Do we need a unique directory?
 readonly MODEL_REPO_DIR=/paddlex/var/paddlex_model_repo
