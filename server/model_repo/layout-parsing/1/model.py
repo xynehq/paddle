@@ -1,6 +1,12 @@
-from typing import Any, Dict, Final, List, Tuple
 import gc
+import io
+import queue
+import threading
+from typing import Any, Dict, Final, List, Optional, Tuple
+
+import numpy as np
 import paddle
+from PIL import Image, ImageSequence
 
 from paddlex_hps_server import (
     BaseTritonPythonModel,
@@ -13,6 +19,8 @@ from paddlex_hps_server.storage import SupportsGetURL, create_storage
 
 _DEFAULT_MAX_NUM_INPUT_IMGS: Final[int] = 10
 _DEFAULT_MAX_OUTPUT_IMG_SIZE: Final[Tuple[int, int]] = (2000, 2000)
+_PDF_RENDER_ZOOM: Final[float] = 2.0
+_IMAGE_QUEUE_MAXSIZE: Final[int] = 2
 
 
 class TritonPythonModel(BaseTritonPythonModel):
@@ -55,6 +63,97 @@ class TritonPythonModel(BaseTritonPythonModel):
     def get_result_model_type(self):
         return schemas.pp_structurev3.InferResult
 
+    def _start_image_producer(
+        self,
+        file_bytes: bytes,
+        file_type: str,
+        max_num_imgs: Optional[int],
+    ):
+        output_queue: queue.Queue = queue.Queue(maxsize=_IMAGE_QUEUE_MAXSIZE)
+
+        producer = threading.Thread(
+            target=self._image_conversion_worker,
+            args=(file_bytes, file_type, max_num_imgs, output_queue),
+            daemon=True,
+        )
+        producer.start()
+        return output_queue, producer
+
+    def _image_conversion_worker(
+        self,
+        file_bytes: bytes,
+        file_type: str,
+        max_num_imgs: Optional[int],
+        output_queue: queue.Queue,
+    ):
+        try:
+            if file_type == "PDF":
+                iterator = self._iterate_pdf_pages(file_bytes, max_num_imgs)
+            else:
+                iterator = self._iterate_image_frames(file_bytes, max_num_imgs)
+            for payload in iterator:
+                output_queue.put(("data", payload))
+        except Exception as exc:
+            output_queue.put(("error", exc))
+        finally:
+            output_queue.put(("done", None))
+
+    def _iterate_pdf_pages(
+        self, file_bytes: bytes, max_num_imgs: Optional[int]
+    ):
+        try:
+            import fitz  # PyMuPDF
+        except ImportError as exc:
+            raise RuntimeError(
+                "PyMuPDF (fitz) is required to process PDF inputs."
+            ) from exc
+
+        with fitz.open(stream=file_bytes, filetype="pdf") as document:
+            total_pages = document.page_count
+            if max_num_imgs is None or max_num_imgs < 0:
+                allowed_pages = total_pages
+            else:
+                allowed_pages = min(total_pages, max_num_imgs)
+
+            for page_index in range(allowed_pages):
+                page = document.load_page(page_index)
+                pix = page.get_pixmap(
+                    matrix=fitz.Matrix(_PDF_RENDER_ZOOM, _PDF_RENDER_ZOOM),
+                    alpha=False,
+                )
+                image = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                    pix.height, pix.width, pix.n
+                )
+                if pix.n == 1:
+                    image = np.repeat(image, 3, axis=2)
+                elif pix.n == 4:
+                    image = image[:, :, :3]
+                image = np.ascontiguousarray(image[:, :, ::-1])
+                yield page_index, image, {"width": pix.width, "height": pix.height}
+                del image
+                del pix
+
+    def _iterate_image_frames(
+        self, file_bytes: bytes, max_num_imgs: Optional[int]
+    ):
+        if max_num_imgs == 0:
+            return
+
+        max_allowed = (
+            None if max_num_imgs is None or max_num_imgs < 0 else max_num_imgs
+        )
+        with Image.open(io.BytesIO(file_bytes)) as image:
+            for frame_index, frame in enumerate(ImageSequence.Iterator(image)):
+                if max_allowed is not None and frame_index >= max_allowed:
+                    break
+                rgb_frame = frame.convert("RGB")
+                np_img = np.asarray(rgb_frame)
+                np_img = np.ascontiguousarray(np_img[:, :, ::-1])
+                height, width = np_img.shape[:2]
+                yield frame_index, np_img, {"width": width, "height": height}
+                del np_img
+                del rgb_frame
+
     def run(self, input, log_id):
         if input.fileType is None:
             if utils.is_url(input.file):
@@ -79,94 +178,146 @@ class TritonPythonModel(BaseTritonPythonModel):
         visualize_enabled = input.visualize if input.visualize is not None else self.app_config.visualize
 
         file_bytes = utils.get_raw_bytes(input.file)
-        images, data_info = utils.file_to_images(
-            file_bytes,
-            file_type,
-            max_num_imgs=self.context["max_num_input_imgs"],
+        max_num_imgs = self.context["max_num_input_imgs"]
+
+        pipeline_kwargs = dict(
+            use_doc_orientation_classify=input.useDocOrientationClassify,
+            use_doc_unwarping=input.useDocUnwarping,
+            use_textline_orientation=input.useTextlineOrientation,
+            use_seal_recognition=input.useSealRecognition,
+            use_table_recognition=input.useTableRecognition,
+            use_formula_recognition=input.useFormulaRecognition,
+            use_chart_recognition=input.useChartRecognition,
+            use_region_detection=input.useRegionDetection,
+            layout_threshold=input.layoutThreshold,
+            layout_nms=input.layoutNms,
+            layout_unclip_ratio=input.layoutUnclipRatio,
+            layout_merge_bboxes_mode=input.layoutMergeBboxesMode,
+            text_det_limit_side_len=input.textDetLimitSideLen,
+            text_det_limit_type=input.textDetLimitType,
+            text_det_thresh=input.textDetThresh,
+            text_det_box_thresh=input.textDetBoxThresh,
+            text_det_unclip_ratio=input.textDetUnclipRatio,
+            text_rec_score_thresh=input.textRecScoreThresh,
+            seal_det_limit_side_len=input.sealDetLimitSideLen,
+            seal_det_limit_type=input.sealDetLimitType,
+            seal_det_thresh=input.sealDetThresh,
+            seal_det_box_thresh=input.sealDetBoxThresh,
+            seal_det_unclip_ratio=input.sealDetUnclipRatio,
+            seal_rec_score_thresh=input.sealRecScoreThresh,
+            use_wired_table_cells_trans_to_html=input.useWiredTableCellsTransToHtml,
+            use_wireless_table_cells_trans_to_html=input.useWirelessTableCellsTransToHtml,
+            use_table_orientation_classify=input.useTableOrientationClassify,
+            use_ocr_results_with_table_cells=input.useOcrResultsWithTableCells,
+            use_e2e_wired_table_rec_model=input.useE2eWiredTableRecModel,
+            use_e2e_wireless_table_rec_model=input.useE2eWirelessTableRecModel,
         )
 
-        result = list(
-            self.pipeline(
-                images,
-                use_doc_orientation_classify=input.useDocOrientationClassify,
-                use_doc_unwarping=input.useDocUnwarping,
-                use_textline_orientation=input.useTextlineOrientation,
-                use_seal_recognition=input.useSealRecognition,
-                use_table_recognition=input.useTableRecognition,
-                use_formula_recognition=input.useFormulaRecognition,
-                use_chart_recognition=input.useChartRecognition,
-                use_region_detection=input.useRegionDetection,
-                layout_threshold=input.layoutThreshold,
-                layout_nms=input.layoutNms,
-                layout_unclip_ratio=input.layoutUnclipRatio,
-                layout_merge_bboxes_mode=input.layoutMergeBboxesMode,
-                text_det_limit_side_len=input.textDetLimitSideLen,
-                text_det_limit_type=input.textDetLimitType,
-                text_det_thresh=input.textDetThresh,
-                text_det_box_thresh=input.textDetBoxThresh,
-                text_det_unclip_ratio=input.textDetUnclipRatio,
-                text_rec_score_thresh=input.textRecScoreThresh,
-                seal_det_limit_side_len=input.sealDetLimitSideLen,
-                seal_det_limit_type=input.sealDetLimitType,
-                seal_det_thresh=input.sealDetThresh,
-                seal_det_box_thresh=input.sealDetBoxThresh,
-                seal_det_unclip_ratio=input.sealDetUnclipRatio,
-                seal_rec_score_thresh=input.sealRecScoreThresh,
-                use_wired_table_cells_trans_to_html=input.useWiredTableCellsTransToHtml,
-                use_wireless_table_cells_trans_to_html=input.useWirelessTableCellsTransToHtml,
-                use_table_orientation_classify=input.useTableOrientationClassify,
-                use_ocr_results_with_table_cells=input.useOcrResultsWithTableCells,
-                use_e2e_wired_table_rec_model=input.useE2eWiredTableRecModel,
-                use_e2e_wireless_table_rec_model=input.useE2eWirelessTableRecModel,
-            )
+        image_queue, producer = self._start_image_producer(
+            file_bytes=file_bytes,
+            file_type=file_type,
+            max_num_imgs=max_num_imgs,
         )
 
         layout_parsing_results: List[Dict[str, Any]] = []
-        for i, (img, item) in enumerate(zip(images, result)):
-            pruned_res = app_common.prune_result(item.json["res"])
-            md_data = item.markdown
-            md_text = md_data["markdown_texts"]
-            md_imgs = app_common.postprocess_images(
-                md_data["markdown_images"],
-                log_id,
-                filename_template=f"markdown_{i}/{{key}}",
-                file_storage=self.context["file_storage"],
-                return_urls=self.context["return_img_urls"],
-                max_img_size=self.context["max_output_img_size"],
-            )
-            md_flags = md_data["page_continuation_flags"]
-            if visualize_enabled:
-                imgs = {
-                    "input_img": img,
-                    **item.img,
-                }
-                imgs = app_common.postprocess_images(
-                    imgs,
+        pages_meta: List[Dict[str, int]] = []
+        conversion_error: Optional[Exception] = None
+
+        try:
+            while True:
+                message_type, payload = image_queue.get()
+                if message_type == "done":
+                    break
+                if message_type == "error":
+                    conversion_error = payload
+                    continue
+                page_index, img, page_info = payload
+                pages_meta.append(page_info)
+
+                pipeline_output = self.pipeline([img], **pipeline_kwargs)
+                pipeline_iter = iter(pipeline_output)
+                try:
+                    item = next(pipeline_iter)
+                except StopIteration as exc:
+                    raise RuntimeError(
+                        f"Pipeline produced no output for page index {page_index}"
+                    ) from exc
+                finally:
+                    for _ in pipeline_iter:
+                        pass
+                    del pipeline_iter
+                del pipeline_output
+
+                pruned_res = app_common.prune_result(item.json["res"])
+                md_data = item.markdown
+                md_text = md_data["markdown_texts"]
+                result_index = len(layout_parsing_results)
+                md_imgs = app_common.postprocess_images(
+                    md_data["markdown_images"],
                     log_id,
-                    filename_template=f"{{key}}_{i}.jpg",
+                    filename_template=f"markdown_{result_index}/{{key}}",
                     file_storage=self.context["file_storage"],
                     return_urls=self.context["return_img_urls"],
                     max_img_size=self.context["max_output_img_size"],
                 )
-            else:
-                imgs = {}
-            layout_parsing_results.append(
-                dict(
-                    prunedResult=pruned_res,
-                    markdown=dict(
-                        text=md_text,
-                        images=md_imgs,
-                        isStart=md_flags[0],
-                        isEnd=md_flags[1],
-                    ),
-                    outputImages=(
-                        {k: v for k, v in imgs.items() if k != "input_img"}
-                        if imgs
-                        else None
-                    ),
-                    inputImage=imgs.get("input_img"),
+                md_flags = md_data["page_continuation_flags"]
+                if visualize_enabled:
+                    imgs = {
+                        "input_img": img,
+                        **item.img,
+                    }
+                    imgs = app_common.postprocess_images(
+                        imgs,
+                        log_id,
+                        filename_template=f"{{key}}_{result_index}.jpg",
+                        file_storage=self.context["file_storage"],
+                        return_urls=self.context["return_img_urls"],
+                        max_img_size=self.context["max_output_img_size"],
+                    )
+                else:
+                    imgs = {}
+                layout_parsing_results.append(
+                    dict(
+                        prunedResult=pruned_res,
+                        markdown=dict(
+                            text=md_text,
+                            images=md_imgs,
+                            isStart=md_flags[0],
+                            isEnd=md_flags[1],
+                        ),
+                        outputImages=(
+                            {k: v for k, v in imgs.items() if k != "input_img"}
+                            if imgs
+                            else None
+                        ),
+                        inputImage=imgs.get("input_img"),
+                    )
                 )
+
+                del item
+                del img
+        finally:
+            producer.join()
+
+        if conversion_error is not None:
+            return protocol.create_aistudio_output_without_result(
+                422,
+                f"Failed to convert the input file into images: {conversion_error}",
+                log_id=log_id,
             )
+
+        if not layout_parsing_results:
+            return protocol.create_aistudio_output_without_result(
+                422,
+                "No renderable pages found in the provided file.",
+                log_id=log_id,
+            )
+
+        data_info = {
+            "numPages": len(pages_meta),
+            "pages": pages_meta,
+            "type": file_type.lower(),
+        }
 
         result_output = schemas.pp_structurev3.InferResult(
             layoutParsingResults=layout_parsing_results,
@@ -174,7 +325,7 @@ class TritonPythonModel(BaseTritonPythonModel):
         )
 
         # Explicit memory cleanup to prevent GPU memory persistence
-        del file_bytes, images, result, layout_parsing_results
+        del file_bytes, pages_meta, layout_parsing_results, pipeline_kwargs
         gc.collect()
 
         # Clear PaddlePaddle GPU cache

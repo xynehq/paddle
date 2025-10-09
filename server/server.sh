@@ -25,7 +25,7 @@ if [ -d shared_mods ]; then
     export PYTHONPATH="$(realpath shared_mods):${PYTHONPATH}"
 fi
 
-# # Resolve model_dir entries dynamically based on available local models
+# Resolve model_dir entries dynamically based on available local models
 # python3 "$(dirname "$0")/resolve_model_dirs.py" \
 #     --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
 #     --base-dir "/root/.paddlex/official_models"
