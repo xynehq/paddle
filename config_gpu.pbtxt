@@ -1,10 +1,5 @@
 backend: "python"
-max_batch_size: 16
-
-dynamic_batching {
-  preferred_batch_size: [16]         # Triton tries to form these sizes
-  max_queue_delay_microseconds: 1000000   # 1 second wait to accumulate batch
-}
+max_batch_size: 4
 
 input [
   {
@@ -22,7 +17,7 @@ output [
 ]
 instance_group [
   {
-      count: 2
+      count: 1
       kind: KIND_GPU
       gpus: [ 0 ]
   }

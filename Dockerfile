@@ -4,6 +4,12 @@ FROM ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlex/hps:paddlex3.1-gpu
 # Set environment variables
 ENV PADDLEX_HPS_DEVICE_TYPE=gpu
 
+# Install python dependencies needed by the Triton Python backend
+RUN python3 -m pip install --no-cache-dir \
+    "pymupdf>=1.24" \
+    "pillow>=10.4,<11.0" \
+    "numpy>=1.24"
+
 # Set working directory inside the container
 WORKDIR /app
 

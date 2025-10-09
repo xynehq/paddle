@@ -7,18 +7,18 @@ use_table_recognition: True
 use_formula_recognition: False
 use_chart_recognition: False
 use_region_detection: True
-
+use_concurrent_processing: False
 
 Serving:
   extra:
     max_num_input_imgs: null
 
 PREDICT:
-  hpi_config:
-    backend: paddle
-    backend_config:  
-      run_mode: trt_fp16
-    auto_paddle2onnx: True
+  # hpi_config:
+    # backend: tensorrt
+    # backend: tensorrt
+      # precision: "fp16"
+    # auto_paddle2onnx: True
 
 SubModules:
   LayoutDetection:
@@ -26,11 +26,11 @@ SubModules:
     model_name: PP-DocLayout_plus-L
     model_dir: null
     batch_size: 8
-    use_hpip: True
-    hpi_config:
-      backend: tensorrt
-      backend_config:  
-        precision: "fp16"
+    # use_hpip: True
+    # hpi_config:
+      # backend: tensorrt
+      # backend: tensorrt
+        # precision: "fp16"
     threshold:
       0: 0.3
       1: 0.5
@@ -81,9 +81,11 @@ SubModules:
     model_name: PP-Chart2Table
     model_dir: null
     batch_size: 1
-    use_hpip: True
-    hpi_config:
-      backend: onnxruntime
+    # use_hpip: True
+    # hpi_config:
+      # backend: tensorrt
+      # backend: tensorrt
+        # precision: "fp16"
 
   RegionDetection:
     module_name: layout_detection
@@ -91,11 +93,11 @@ SubModules:
     model_dir: null
     layout_nms: True
     layout_merge_bboxes_mode: "small"
-    use_hpip: True
-    hpi_config:
-      backend: tensorrt
-      backend_config:
-        precision: "fp16"
+    # use_hpip: True
+    # hpi_config:
+      # backend: tensorrt
+      # backend: tensorrt
+        # precision: "fp16"
 
 SubPipelines:
   DocPreprocessor:
@@ -109,18 +111,20 @@ SubPipelines:
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         batch_size: 8
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: paddle
+          # # backend: tensorrt
+          #   # precision: "fp16"
       DocUnwarping:
         module_name: image_unwarping
         model_name: UVDoc
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
+        # use_hpip: True
+        # hpi_config:
+          # backend: paddle
+          # # backend: tensorrt
+          #   # precision: "fp16"        
 
   GeneralOCR:
     pipeline_name: OCR
@@ -133,11 +137,11 @@ SubPipelines:
         module_name: text_detection
         model_name: PP-OCRv5_server_det
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: tensorrt
-          backend_config:
-            precision: "fp16"
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
         limit_side_len: 736
         limit_type: min
         max_side_limit: 4000
@@ -149,20 +153,20 @@ SubPipelines:
         model_name: PP-LCNet_x0_25_textline_ori
         model_dir: null
         batch_size: 8
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
       TextRecognition:
         module_name: text_recognition
         model_name: PP-OCRv5_server_rec
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
         batch_size: 8
         score_thresh: 0.0
 
@@ -176,56 +180,48 @@ SubPipelines:
         module_name: table_classification
         model_name: PP-LCNet_x1_0_table_cls
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
       WiredTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANeXt_wired
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
       WirelessTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANet_plus
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
       WiredTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wired_table_cell_det
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
-          backend_config:  
-            run_mode: trt_fp16
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -237,11 +233,11 @@ SubPipelines:
             module_name: text_detection
             model_name: PP-OCRv5_server_det
             model_dir: null
-            use_hpip: True
-            hpi_config:
-              backend: tensorrt
-              backend_config:
-                precision: "fp16"
+            # use_hpip: True
+            # hpi_config:
+              # backend: tensorrt
+              # backend: tensorrt
+                # precision: "fp16"
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -253,20 +249,20 @@ SubPipelines:
             model_name: PP-LCNet_x0_25_textline_ori
             model_dir: null
             batch_size: 8
-            use_hpip: True
-            hpi_config:
-              backend: paddle
-              backend_config:  
-                run_mode: trt_fp16
+            # use_hpip: True
+            # hpi_config:
+              # backend: tensorrt
+              # backend: tensorrt
+                # precision: "fp16"
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
-            use_hpip: True
-            hpi_config:
-              backend: paddle
-              backend_config:  
-                run_mode: trt_fp16
+            # use_hpip: True
+            # hpi_config:
+              # backend: tensorrt
+              # backend: tensorrt
+                # precision: "fp16"
             batch_size: 8
         score_thresh: 0.0
 
@@ -287,11 +283,11 @@ SubPipelines:
             module_name: seal_text_detection
             model_name: PP-OCRv4_server_seal_det
             model_dir: null
-            use_hpip: True
-            hpi_config:
-              backend: tensorrt
-              backend_config:
-                precision: "fp16"
+            # use_hpip: True
+            # hpi_config:
+              # backend: tensorrt
+              # backend: tensorrt
+                # precision: "fp16"
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -302,11 +298,11 @@ SubPipelines:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
-            use_hpip: True
-            hpi_config:
-              backend: paddle
-              backend_config:  
-                run_mode: trt_fp16
+            # use_hpip: True
+            # hpi_config:
+              # backend: tensorrt
+              # backend: tensorrt
+                # precision: "fp16"
             batch_size: 8
             score_thresh: 0
 
@@ -320,7 +316,9 @@ SubPipelines:
         module_name: formula_recognition
         model_name: PP-FormulaNet_plus-L
         model_dir: null
-        use_hpip: True
-        hpi_config:
-          backend: paddle
+        # use_hpip: True
+        # hpi_config:
+          # backend: tensorrt
+          # backend: tensorrt
+            # precision: "fp16"
         batch_size: 8

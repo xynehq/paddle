@@ -13,7 +13,7 @@ If none exist, set model_dir to null so that the runtime can
 download by model_name from the official repository.
 
 Usage:
-  python resolve_model_dirs.py --config server/pipeline_config.yaml \
+  python resolve_model_dirs.py --config ../pipeline_config.yaml \
       --base-dir /root/.paddlex/official_models
 
 Multiple base dirs can be provided by repeating --base-dir.
@@ -122,4 +122,3 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-
