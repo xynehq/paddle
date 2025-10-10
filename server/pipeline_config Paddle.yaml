@@ -7,7 +7,7 @@ use_table_recognition: True
 use_formula_recognition: False
 use_chart_recognition: False
 use_region_detection: True
-use_concurrent_processing: False
+
 
 Serving:
   extra:
