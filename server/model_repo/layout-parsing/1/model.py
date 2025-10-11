@@ -19,8 +19,8 @@ from paddlex_hps_server.storage import SupportsGetURL, create_storage
 
 _DEFAULT_MAX_NUM_INPUT_IMGS: Final[int] = 10
 _DEFAULT_MAX_OUTPUT_IMG_SIZE: Final[Tuple[int, int]] = (2000, 2000)
-_PDF_RENDER_ZOOM: Final[float] = 2.0
-_IMAGE_QUEUE_MAXSIZE: Final[int] = 2
+_PDF_RENDER_ZOOM: Final[float] = 1.5
+_IMAGE_QUEUE_MAXSIZE: Final[int] = 1
 
 
 class TritonPythonModel(BaseTritonPythonModel):
@@ -296,6 +296,15 @@ class TritonPythonModel(BaseTritonPythonModel):
 
                 del item
                 del img
+                
+                # Periodic memory cleanup after each page
+                gc.collect()
+                
+                # Clear PaddlePaddle GPU cache after each page
+                try:
+                    paddle.device.cuda.empty_cache()
+                except Exception:
+                    pass  # Ignore if not using GPU or paddle not available
         finally:
             producer.join()
 
