@@ -10,7 +10,7 @@ export PADDLEX_HPS_PIPELINE_CONFIG_PATH="${PADDLEX_HPS_PIPELINE_CONFIG_PATH:-$(r
 # Do we need a unique directory?
 readonly MODEL_REPO_DIR=/paddlex/var/paddlex_model_repo
 
-rm -rf "${MODEL_REPO_DIR}"
+# rm -rf "${MODEL_REPO_DIR}"
 
 cp -r model_repo "${MODEL_REPO_DIR}"
 
