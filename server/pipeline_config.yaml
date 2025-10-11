@@ -349,7 +349,7 @@ SubPipelines:
 
   SealRecognition:
     pipeline_name: seal_recognition
-    batch_size: 8
+    batch_size: 7
     use_layout_detection: False
     use_doc_preprocessor: False
     SubPipelines:
