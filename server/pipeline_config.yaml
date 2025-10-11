@@ -8,9 +8,12 @@ use_formula_recognition: False
 use_chart_recognition: False
 use_region_detection: True
 
+
 Serving:
   extra:
     max_num_input_imgs: null
+
+
 
 SubModules:
   LayoutDetection:
@@ -74,6 +77,7 @@ SubModules:
     use_hpip: True
     hpi_config:
       backend: paddle
+  
 
   RegionDetection:
     module_name: layout_detection
@@ -83,7 +87,7 @@ SubModules:
     layout_merge_bboxes_mode: "small"
     use_hpip: True
     hpi_config:
-      backend: paddle
+        backend: paddle
 
 SubPipelines:
   DocPreprocessor:
@@ -104,9 +108,9 @@ SubPipelines:
         module_name: image_unwarping
         model_name: UVDoc
         model_dir: null
-        use_hpip: True
+        use_hpip: True      
         hpi_config:
-          backend: paddle
+            backend: paddle
 
   GeneralOCR:
     pipeline_name: OCR
@@ -121,7 +125,7 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-          backend: paddle
+            backend: paddle
         limit_side_len: 736
         limit_type: min
         max_side_limit: 4000
@@ -135,14 +139,16 @@ SubPipelines:
         batch_size: 8
         use_hpip: True
         hpi_config:
-          backend: paddle
+            backend: paddle
+
+        
       TextRecognition:
         module_name: text_recognition
         model_name: PP-OCRv5_server_rec
         model_dir: null
         use_hpip: True
         hpi_config:
-          backend: paddle
+            backend: paddle
         batch_size: 8
         score_thresh: 0.0
 
@@ -158,42 +164,41 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-          backend: paddle
+            backend: paddle
       WiredTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANeXt_wired
         model_dir: null
         use_hpip: True
         hpi_config:
-          backend: paddle
+            backend: paddle
       WirelessTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANet_plus
         model_dir: null
         use_hpip: True
-        hpi_config:
-          backend: paddle
+
       WiredTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wired_table_cell_det
         model_dir: null
         use_hpip: True
-        hpi_config:
-          backend: paddle
+hpi_config:
+    backend: paddle
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
         use_hpip: True
-        hpi_config:
-          backend: paddle
+hpi_config:
+    backend: paddle       
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         use_hpip: True
-        hpi_config:
-          backend: paddle
+hpi_config:
+    backend: paddle       
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -206,8 +211,8 @@ SubPipelines:
             model_name: PP-OCRv5_server_det
             model_dir: null
             use_hpip: True
-            hpi_config:
-              backend: paddle
+hpi_config:
+    backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -220,17 +225,17 @@ SubPipelines:
             model_dir: null
             batch_size: 8
             use_hpip: True
-            hpi_config:
-              backend: paddle
+hpi_config:
+    backend: paddle
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-            hpi_config:
-              backend: paddle
+hpi_config:
+    backend: paddle
             batch_size: 8
-            score_thresh: 0.0
+        score_thresh: 0.0
 
   SealRecognition:
     pipeline_name: seal_recognition
@@ -250,8 +255,8 @@ SubPipelines:
             model_name: PP-OCRv4_server_seal_det
             model_dir: null
             use_hpip: True
-            hpi_config:
-              backend: paddle
+hpi_config:
+    backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -263,8 +268,8 @@ SubPipelines:
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-            hpi_config:
-              backend: paddle
+hpi_config:
+    backend: paddle
             batch_size: 8
             score_thresh: 0
 
@@ -279,6 +284,116 @@ SubPipelines:
         model_name: PP-FormulaNet_plus-L
         model_dir: null
         use_hpip: True
-        hpi_config:
-          backend: paddle
+hpi_config:
+    backend: paddle
+        batch_size: 8
+
+      WiredTableCellsDetection:
+        module_name: table_cells_detection
+        model_name: RT-DETR-L_wired_table_cell_det
+        model_dir: null
+        use_hpip: True
+hpi_config:
+    backend: paddle
+      WirelessTableCellsDetection:
+        module_name: table_cells_detection
+        model_name: RT-DETR-L_wireless_table_cell_det
+        model_dir: null
+        use_hpip: True
+hpi_config:
+    backend: paddle       
+      TableOrientationClassify:
+        module_name: doc_text_orientation
+        model_name: PP-LCNet_x1_0_doc_ori
+        model_dir: null
+        use_hpip: True
+hpi_config:
+    backend: paddle       
+    SubPipelines:
+      GeneralOCR:
+        pipeline_name: OCR
+        text_type: general
+        use_doc_preprocessor: False
+        use_textline_orientation: True
+        SubModules:
+          TextDetection:
+            module_name: text_detection
+            model_name: PP-OCRv5_server_det
+            model_dir: null
+            use_hpip: True
+hpi_config:
+    backend: paddle
+            limit_side_len: 736
+            limit_type: min
+            max_side_limit: 4000
+            thresh: 0.3
+            box_thresh: 0.4
+            unclip_ratio: 1.5
+          TextLineOrientation:
+            module_name: textline_orientation
+            model_name: PP-LCNet_x0_25_textline_ori
+            model_dir: null
+            batch_size: 8
+            use_hpip: True
+hpi_config:
+    backend: paddle
+          TextRecognition:
+            module_name: text_recognition
+            model_name: PP-OCRv5_server_rec
+            model_dir: null
+            use_hpip: True
+hpi_config:
+    backend: paddle
+            batch_size: 8
+        score_thresh: 0.0
+
+  SealRecognition:
+    pipeline_name: seal_recognition
+    batch_size: 8
+    use_layout_detection: False
+    use_doc_preprocessor: False
+    SubPipelines:
+      SealOCR:
+        pipeline_name: OCR
+        batch_size: 8
+        text_type: seal
+        use_doc_preprocessor: False
+        use_textline_orientation: False
+        SubModules:
+          TextDetection:
+            module_name: seal_text_detection
+            model_name: PP-OCRv4_server_seal_det
+            model_dir: null
+            use_hpip: True
+hpi_config:
+    backend: paddle
+            limit_side_len: 736
+            limit_type: min
+            max_side_limit: 4000
+            thresh: 0.2
+            box_thresh: 0.6
+            unclip_ratio: 0.5
+          TextRecognition:
+            module_name: text_recognition
+            model_name: PP-OCRv5_server_rec
+            model_dir: null
+            use_hpip: True
+hpi_config:
+    backend: paddle
+            batch_size: 8
+            score_thresh: 0
+
+  FormulaRecognition:
+    pipeline_name: formula_recognition
+    batch_size: 8
+    use_layout_detection: False
+    use_doc_preprocessor: False
+    SubModules:
+      FormulaRecognition:
+        module_name: formula_recognition
+        model_name: PP-FormulaNet_plus-L
+        model_dir: null
+        use_hpip: True
+hpi_config:
+    backend: paddle
         batch_size: 8
