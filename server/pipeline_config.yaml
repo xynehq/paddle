@@ -183,22 +183,22 @@ SubPipelines:
         model_name: RT-DETR-L_wired_table_cell_det
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle
+        hpi_config:
+            backend: paddle
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle       
+        hpi_config:
+            backend: paddle       
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle       
+        hpi_config:
+            backend: paddle       
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -211,8 +211,8 @@ hpi_config:
             model_name: PP-OCRv5_server_det
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -225,15 +225,15 @@ hpi_config:
             model_dir: null
             batch_size: 8
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             batch_size: 8
         score_thresh: 0.0
 
@@ -255,8 +255,8 @@ hpi_config:
             model_name: PP-OCRv4_server_seal_det
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -268,8 +268,8 @@ hpi_config:
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             batch_size: 8
             score_thresh: 0
 
@@ -284,8 +284,8 @@ hpi_config:
         model_name: PP-FormulaNet_plus-L
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle
+        hpi_config:
+            backend: paddle
         batch_size: 8
 
       WiredTableCellsDetection:
@@ -293,22 +293,22 @@ hpi_config:
         model_name: RT-DETR-L_wired_table_cell_det
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle
+        hpi_config:
+            backend: paddle
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle       
+        hpi_config:
+            backend: paddle       
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle       
+        hpi_config:
+            backend: paddle       
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -321,8 +321,8 @@ hpi_config:
             model_name: PP-OCRv5_server_det
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -335,15 +335,15 @@ hpi_config:
             model_dir: null
             batch_size: 8
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             batch_size: 8
         score_thresh: 0.0
 
@@ -365,8 +365,8 @@ hpi_config:
             model_name: PP-OCRv4_server_seal_det
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -378,8 +378,8 @@ hpi_config:
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
-hpi_config:
-    backend: paddle
+            hpi_config:
+                backend: paddle
             batch_size: 8
             score_thresh: 0
 
@@ -394,6 +394,6 @@ hpi_config:
         model_name: PP-FormulaNet_plus-L
         model_dir: null
         use_hpip: True
-hpi_config:
-    backend: paddle
+        hpi_config:
+            backend: paddle
         batch_size: 8
