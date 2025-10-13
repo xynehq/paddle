@@ -21,6 +21,38 @@ find "${MODEL_REPO_DIR}" -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= re
     fi
 done
 
+# Align the Triton instance count with what the model configs request.
+instance_count="$(
+    MODEL_REPO_DIR="${MODEL_REPO_DIR}" python3 <<'PY'
+import os
+import pathlib
+import re
+
+model_repo = pathlib.Path(os.environ["MODEL_REPO_DIR"])
+device = os.environ.get("PADDLEX_HPS_DEVICE_TYPE")
+
+config_paths = sorted(model_repo.rglob("config.pbtxt"))
+if not config_paths and device:
+    config_paths = sorted(model_repo.rglob(f"config_{device}.pbtxt"))
+
+total = 0
+for path in config_paths:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        continue
+    for match in re.finditer(r"count\s*:\s*(\d+)", text):
+        total += int(match.group(1))
+
+print(total)
+PY
+)"
+instance_count="${instance_count//[[:space:]]/}"
+if [ -n "${instance_count}" ]; then
+    export TRITON_INSTANCE_COUNT="${instance_count}"
+    printf 'Resolved TRITON_INSTANCE_COUNT=%s from model configs\n' "${instance_count}"
+fi
+
 if [ -d shared_mods ]; then
     export PYTHONPATH="$(realpath shared_mods):${PYTHONPATH}"
 fi
