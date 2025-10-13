@@ -11,8 +11,10 @@ services:
       - ./config_gpu.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
 #      - ./paddlex/official_models:/root/.paddlex/official_models
     ports:
-      - "8000:8000"            # expose port 8080 from container to host
-      - "8001:8001"
+      - "8000:8000"            # Triton HTTP endpoint
+      - "8001:8001"           # Triton gRPC endpoint
+      - "8002:8002"            # Triton metrics endpoint
+      - "8081:8081"            # Instance status endpoint exposed by Python backend
     shm_size: 8g               # equivalent to --shm-size 8g
     init: true                 # equivalent to --init
     deploy:
