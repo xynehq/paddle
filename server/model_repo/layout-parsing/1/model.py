@@ -2,6 +2,7 @@ import atexit
 import gc
 import io
 import json
+import logging
 import multiprocessing
 import os
 import queue
@@ -70,12 +71,13 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
             active = _active_request_counter.value
             total = _total_instance_counter.value
 
-        idle = max(total - active, 0) if total > 0 else 0
+        idle = max(total - active, 0) if total > 0 else None
         payload = {
             "active_instances": active,
             "configured_instances": total,
-            "idle_instances": idle,
         }
+        if idle is not None:
+            payload["idle_instances"] = idle
         response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
         self.send_response(200)
@@ -89,7 +91,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
 
 
 def _shutdown_status_server():
-    global _status_httpd
+    global _status_httpd, _status_server_started
     if _status_httpd is not None:
         try:
             _status_httpd.shutdown()
@@ -98,6 +100,8 @@ def _shutdown_status_server():
             pass
         finally:
             _status_httpd = None
+    with _status_server_lock:
+        _status_server_started = False
 
 
 def _start_status_server_if_needed():
@@ -115,7 +119,13 @@ def _start_status_server_if_needed():
                 (_STATUS_SERVER_HOST, _STATUS_SERVER_PORT),
                 _InstanceStatusRequestHandler,
             )
-        except OSError:
+        except OSError as exc:
+            logging.warning(
+                "Instance status server failed to bind %s:%s (%s)",
+                _STATUS_SERVER_HOST,
+                _STATUS_SERVER_PORT,
+                exc,
+            )
             return
 
         _status_httpd = httpd
@@ -180,6 +190,8 @@ def _update_total_instance_counter(candidate_total: int):
     if candidate_total <= 0:
         return
     with _activity_lock:
+        # Keep the highest observed value to handle multiple worker initializations
+        # racing to report their configured instance counts.
         _total_instance_counter.value = max(
             _total_instance_counter.value, candidate_total
         )
