@@ -40,6 +40,8 @@ _STATUS_ENDPOINT_PATH: Final[str] = os.environ.get(
     "TRITON_INSTANCE_STATUS_PATH", "/instance_status"
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 try:
     _mp_ctx = multiprocessing.get_context("fork")
 except ValueError:
@@ -120,7 +122,7 @@ def _start_status_server_if_needed():
                 _InstanceStatusRequestHandler,
             )
         except OSError as exc:
-            logging.warning(
+            _LOGGER.warning(
                 "Instance status server failed to bind %s:%s (%s)",
                 _STATUS_SERVER_HOST,
                 _STATUS_SERVER_PORT,
@@ -199,6 +201,21 @@ def _update_total_instance_counter(candidate_total: int):
 
 atexit.register(_shutdown_status_server)
 
+_initial_instance_env = os.environ.get("TRITON_INSTANCE_COUNT")
+if _initial_instance_env:
+    try:
+        _update_total_instance_counter(int(_initial_instance_env))
+    except ValueError:
+        _LOGGER.warning(
+            "Ignored invalid TRITON_INSTANCE_COUNT value: %s",
+            _initial_instance_env,
+        )
+
+try:
+    _start_status_server_if_needed()
+except Exception as exc:  # pragma: no cover - defensive guard
+    _LOGGER.exception("Failed to start instance status server: %s", exc)
+
 
 class TritonPythonModel(BaseTritonPythonModel):
     def initialize(self, args):
@@ -237,6 +254,19 @@ class TritonPythonModel(BaseTritonPythonModel):
         configured_instances = _infer_configured_instance_count(
             getattr(self, "model_config", None)
         )
+        if not configured_instances and isinstance(args, dict):
+            model_config_json = args.get("model_config")
+            if model_config_json:
+                try:
+                    maybe_configured = _infer_configured_instance_count(
+                        json.loads(model_config_json)
+                    )
+                    configured_instances = max(configured_instances, maybe_configured)
+                except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                    _LOGGER.debug(
+                        "Failed to parse model_config for instance count: %s",
+                        exc,
+                    )
         env_override = os.environ.get("TRITON_INSTANCE_COUNT")
         if env_override:
             try:
