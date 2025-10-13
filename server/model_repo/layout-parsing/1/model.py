@@ -1,11 +1,18 @@
+import atexit
 import gc
 import io
+import json
+import multiprocessing
+import os
 import queue
 import threading
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, Final, List, Optional, Tuple
 
 import numpy as np
 import paddle
+import socketserver
 from PIL import Image, ImageSequence
 
 from paddlex_hps_server import (
@@ -21,6 +28,164 @@ _DEFAULT_MAX_NUM_INPUT_IMGS: Final[int] = 10
 _DEFAULT_MAX_OUTPUT_IMG_SIZE: Final[Tuple[int, int]] = (2000, 2000)
 _PDF_RENDER_ZOOM: Final[float] = 1.5
 _IMAGE_QUEUE_MAXSIZE: Final[int] = 1
+
+_STATUS_SERVER_HOST: Final[str] = os.environ.get(
+    "TRITON_INSTANCE_STATUS_HOST", "0.0.0.0"
+)
+_STATUS_SERVER_PORT: Final[int] = int(
+    os.environ.get("TRITON_INSTANCE_STATUS_PORT", "8081")
+)
+_STATUS_ENDPOINT_PATH: Final[str] = os.environ.get(
+    "TRITON_INSTANCE_STATUS_PATH", "/instance_status"
+)
+
+try:
+    _mp_ctx = multiprocessing.get_context("fork")
+except ValueError:
+    _mp_ctx = multiprocessing.get_context()
+_activity_lock = _mp_ctx.Lock()
+_active_request_counter = _mp_ctx.Value("i", 0)
+_total_instance_counter = _mp_ctx.Value("i", 0)
+_status_server_lock = threading.Lock()
+_status_server_started = False
+_status_httpd: Optional[HTTPServer] = None
+
+
+class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        normalized_path = self.path.rstrip("/") or "/"
+        normalized_endpoint = _STATUS_ENDPOINT_PATH.rstrip("/") or "/"
+        if normalized_path != normalized_endpoint:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+
+        with _activity_lock:
+            active = _active_request_counter.value
+            total = _total_instance_counter.value
+
+        idle = max(total - active, 0) if total > 0 else 0
+        payload = {
+            "active_instances": active,
+            "configured_instances": total,
+            "idle_instances": idle,
+        }
+        response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response)
+
+    def log_message(self, format, *args):
+        return
+
+
+def _shutdown_status_server():
+    global _status_httpd
+    if _status_httpd is not None:
+        try:
+            _status_httpd.shutdown()
+            _status_httpd.server_close()
+        except Exception:
+            pass
+        finally:
+            _status_httpd = None
+
+
+def _start_status_server_if_needed():
+    global _status_server_started
+
+    with _status_server_lock:
+        if _status_server_started:
+            return
+        _status_server_started = True
+
+    def _serve():
+        global _status_httpd
+        try:
+            httpd = _ThreadedHTTPServer(
+                (_STATUS_SERVER_HOST, _STATUS_SERVER_PORT),
+                _InstanceStatusRequestHandler,
+            )
+        except OSError:
+            return
+
+        _status_httpd = httpd
+        try:
+            httpd.serve_forever()
+        finally:
+            httpd.server_close()
+            _status_httpd = None
+
+    threading.Thread(target=_serve, daemon=True).start()
+
+
+@contextmanager
+def _track_active_requests():
+    with _activity_lock:
+        _active_request_counter.value += 1
+    try:
+        yield
+    finally:
+        with _activity_lock:
+            _active_request_counter.value = max(
+                _active_request_counter.value - 1, 0
+            )
+
+
+def _infer_configured_instance_count(model_config: Any) -> int:
+    if model_config is None:
+        return 0
+
+    def _extract_groups(config_obj: Any) -> List[Any]:
+        if config_obj is None:
+            return []
+        if isinstance(config_obj, dict):
+            if "instance_group" in config_obj:
+                return config_obj["instance_group"] or []
+            if "config" in config_obj:
+                return _extract_groups(config_obj["config"])
+            return []
+        groups = getattr(config_obj, "instance_group", None)
+        if groups is not None:
+            return list(groups)
+        nested = getattr(config_obj, "config", None)
+        if nested is not None:
+            return _extract_groups(nested)
+        return []
+
+    groups = _extract_groups(model_config)
+    total = 0
+    for group in groups:
+        if isinstance(group, dict):
+            candidate = group.get("count", 0)
+        else:
+            candidate = getattr(group, "count", 0)
+        try:
+            total += int(candidate)
+        except (TypeError, ValueError):
+            continue
+    return max(total, 0)
+
+
+def _update_total_instance_counter(candidate_total: int):
+    if candidate_total <= 0:
+        return
+    with _activity_lock:
+        _total_instance_counter.value = max(
+            _total_instance_counter.value, candidate_total
+        )
+
+
+atexit.register(_shutdown_status_server)
 
 
 class TritonPythonModel(BaseTritonPythonModel):
@@ -56,6 +221,18 @@ class TritonPythonModel(BaseTritonPythonModel):
                 )
             if not isinstance(file_storage, SupportsGetURL):
                 raise TypeError(f"{type(file_storage)} does not support getting URLs.")
+
+        configured_instances = _infer_configured_instance_count(
+            getattr(self, "model_config", None)
+        )
+        env_override = os.environ.get("TRITON_INSTANCE_COUNT")
+        if env_override:
+            try:
+                configured_instances = max(configured_instances, int(env_override))
+            except ValueError:
+                pass
+        _update_total_instance_counter(configured_instances)
+        _start_status_server_if_needed()
 
     def get_input_model_type(self):
         return schemas.pp_structurev3.InferRequest
@@ -155,6 +332,10 @@ class TritonPythonModel(BaseTritonPythonModel):
                 del rgb_frame
 
     def run(self, input, log_id):
+        with _track_active_requests():
+            return self._run_impl(input, log_id)
+
+    def _run_impl(self, input, log_id):
         if input.fileType is None:
             if utils.is_url(input.file):
                 maybe_file_type = utils.infer_file_type(input.file)
