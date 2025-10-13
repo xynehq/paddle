@@ -1,0 +1,316 @@
+(base) aayush_shah@aniketagrawal-2N452L27HKPC:~/paddle$ sudo docker compose up
+[+] Running 1/1
+ ✔ Container paddlex-server  Recreated                                                                                               0.0s 
+Attaching to paddlex-server
+paddlex-server  | 
+paddlex-server  | ==========
+paddlex-server  | == CUDA ==
+paddlex-server  | ==========
+paddlex-server  | 
+paddlex-server  | CUDA Version 11.8.0
+paddlex-server  | 
+paddlex-server  | Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+paddlex-server  | 
+paddlex-server  | This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+paddlex-server  | By pulling and using the container, you accept the terms and conditions of this license:
+paddlex-server  | https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+paddlex-server  | 
+paddlex-server  | A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+paddlex-server  | 
+paddlex-server  | I1007 18:31:15.548340 7 metrics.cc:298] Collecting metrics for GPU 0: NVIDIA GeForce RTX 4090
+paddlex-server  | I1007 18:31:15.694398 7 pinned_memory_manager.cc:240] Pinned memory pool is created at '0x79d7c2000000' with size 268435456
+paddlex-server  | I1007 18:31:15.695770 7 cuda_memory_manager.cc:105] CUDA memory pool is created on device 0 with size 67108864
+paddlex-server  | I1007 18:31:15.698777 7 model_repository_manager.cc:1022] loading: layout-parsing:1
+paddlex-server  | I1007 18:31:15.818693 7 python.cc:1880] TRITONBACKEND_ModelInstanceInitialize: layout-parsing_0_0 (GPU device 0)
+paddlex-server  | [    INFO] [2025-10-07 18:31:17,840] [*] [*] - Triton model config: {'name': 'layout-parsing', 'platform': '', 'backend': 'python', 'version_policy': {'latest': {'num_versions': 1}}, 'max_batch_size': 8, 'input': [{'name': 'input', 'data_type': 'TYPE_STRING', 'format': 'FORMAT_NONE', 'dims': [1], 'is_shape_tensor': False, 'allow_ragged_batch': False}], 'output': [{'name': 'output', 'data_type': 'TYPE_STRING', 'dims': [1], 'label_filename': '', 'is_shape_tensor': False}], 'batch_input': [], 'batch_output': [], 'optimization': {'priority': 'PRIORITY_DEFAULT', 'input_pinned_memory': {'enable': True}, 'output_pinned_memory': {'enable': True}, 'gather_kernel_buffer_threshold': 0, 'eager_batching': False}, 'instance_group': [{'name': 'layout-parsing_0', 'kind': 'KIND_GPU', 'count': 2, 'gpus': [0], 'secondary_devices': [], 'profile': [], 'passive': False, 'host_policy': ''}], 'default_model_filename': '', 'cc_model_filenames': {}, 'metric_tags': {}, 'parameters': {}, 'model_warmup': []}
+paddlex-server  | [    INFO] [2025-10-07 18:31:17,840] [*] [*] - Input names: ['input']
+paddlex-server  | [    INFO] [2025-10-07 18:31:17,840] [*] [*] - Output names: ['output']
+paddlex-server  | Creating model: ('PP-LCNet_x1_0_doc_ori', None)
+paddlex-server  | Using official model (PP-LCNet_x1_0_doc_ori), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 834.22it/s]
+paddlex-server  | TensorRT dynamic shapes will be loaded from the file.
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp16' use_dynamic_shapes=True dynamic_shapes={'x': [[1, 3, 224, 224], [1, 3, 224, 224], [8, 3, 224, 224]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(719)::CreateTrtEngineFromOnnx     Detect serialized TensorRT Engine file in /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori/.cache/tensorrt/trt_serialized.trt, will load it directly.
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: x, shape: [8, 3, 224, 224], The shape range before: min_shape=[-1, 3, 224, 224], max_shape=[-1, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[8, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: x, shape: [1, 3, 224, 224], The shape range before: min_shape=[8, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[1, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(108)::LoadTrtCache        Build TensorRT Engine from cache file: /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori/.cache/tensorrt/trt_serialized.trt with shape range information as below,
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(111)::LoadTrtCache        Input name: x, shape=[-1, 3, 224, 224], min=[1, 3, 224, 224], max=[8, 3, 224, 224]
+paddlex-server  | 
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('UVDoc', None)
+paddlex-server  | Using official model (UVDoc), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 590.05it/s]
+paddlex-server  | The Paddle Inference backend is selected with the default configuration. This may not provide optimal performance.
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: paddle,  trt_dynamic_shapes: {'img': [[1, 3, 128, 64], [1, 3, 256, 128], [8, 3, 512, 256]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('PP-DocBlockLayout', None)
+paddlex-server  | Using official model (PP-DocBlockLayout), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 684.11it/s]
+paddlex-server  | TensorRT dynamic shapes will be loaded from the file.
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp32' use_dynamic_shapes=True dynamic_shapes={'im_shape': [[1, 2], [1, 2], [8, 2]], 'image': [[1, 3, 640, 640], [1, 3, 640, 640], [8, 3, 640, 640]], 'scale_factor': [[1, 2], [1, 2], [8, 2]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(719)::CreateTrtEngineFromOnnx     Detect serialized TensorRT Engine file in /root/.paddlex/official_models/PP-DocBlockLayout/.cache/tensorrt/trt_serialized.trt, will load it directly.
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: im_shape, shape: [8, 2], The shape range before: min_shape=[-1, 2], max_shape=[-1, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[8, 2], max_shape=[8, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: im_shape, shape: [1, 2], The shape range before: min_shape=[8, 2], max_shape=[8, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[1, 2], max_shape=[8, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: image, shape: [8, 3, 640, 640], The shape range before: min_shape=[-1, 3, 640, 640], max_shape=[-1, 3, 640, 640].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[8, 3, 640, 640], max_shape=[8, 3, 640, 640].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: image, shape: [1, 3, 640, 640], The shape range before: min_shape=[8, 3, 640, 640], max_shape=[8, 3, 640, 640].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[1, 3, 640, 640], max_shape=[8, 3, 640, 640].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: scale_factor, shape: [8, 2], The shape range before: min_shape=[-1, 2], max_shape=[-1, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[8, 2], max_shape=[8, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: scale_factor, shape: [1, 2], The shape range before: min_shape=[8, 2], max_shape=[8, 2].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[1, 2], max_shape=[8, 2].
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(108)::LoadTrtCache        Build TensorRT Engine from cache file: /root/.paddlex/official_models/PP-DocBlockLayout/.cache/tensorrt/trt_serialized.trt with shape range information as below,
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(111)::LoadTrtCache        Input name: im_shape, shape=[-1, 2], min=[1, 2], max=[8, 2]
+paddlex-server  | 
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(111)::LoadTrtCache        Input name: image, shape=[-1, 3, 640, 640], min=[1, 3, 640, 640], max=[8, 3, 640, 640]
+paddlex-server  | 
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(111)::LoadTrtCache        Input name: scale_factor, shape=[-1, 2], min=[1, 2], max=[8, 2]
+paddlex-server  | 
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('PP-DocLayout_plus-L', None)
+paddlex-server  | Using official model (PP-DocLayout_plus-L), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 596.02it/s]
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp16' use_dynamic_shapes=True dynamic_shapes={'im_shape': [[1, 2], [1, 2], [8, 2]], 'image': [[1, 3, 800, 800], [1, 3, 800, 800], [8, 3, 800, 800]], 'scale_factor': [[1, 2], [1, 2], [8, 2]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(567)::BuildTrtEngine      [TrtBackend] Use FP16 to inference.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(572)::BuildTrtEngine      Start to building TensorRT Engine...
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(659)::BuildTrtEngine      TensorRT Engine is built successfully.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(661)::BuildTrtEngine      Serialize TensorRTEngine to local file /root/.paddlex/official_models/PP-DocLayout_plus-L/.cache/tensorrt/trt_serialized.trt.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(672)::BuildTrtEngine      TensorRTEngine is serialized to local file /root/.paddlex/official_models/PP-DocLayout_plus-L/.cache/tensorrt/trt_serialized.trt, we can load this model from the serialized engine directly next time.
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('PP-LCNet_x0_25_textline_ori', None)
+paddlex-server  | Using official model (PP-LCNet_x0_25_textline_ori), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 2891.29it/s]
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp32' use_dynamic_shapes=True dynamic_shapes={'x': [[1, 3, 80, 160], [1, 3, 80, 160], [8, 3, 80, 160]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(572)::BuildTrtEngine      Start to building TensorRT Engine...
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(659)::BuildTrtEngine      TensorRT Engine is built successfully.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(661)::BuildTrtEngine      Serialize TensorRTEngine to local file /root/.paddlex/official_models/PP-LCNet_x0_25_textline_ori/.cache/tensorrt/trt_serialized.trt.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(672)::BuildTrtEngine      TensorRTEngine is serialized to local file /root/.paddlex/official_models/PP-LCNet_x0_25_textline_ori/.cache/tensorrt/trt_serialized.trt, we can load this model from the serialized engine directly next time.
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('PP-OCRv5_server_det', None)
+paddlex-server  | Using official model (PP-OCRv5_server_det), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 1186.28it/s]
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp32' use_dynamic_shapes=True dynamic_shapes={'x': [[1, 3, 32, 32], [1, 3, 736, 736], [1, 3, 4000, 4000]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(572)::BuildTrtEngine      Start to building TensorRT Engine...
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(659)::BuildTrtEngine      TensorRT Engine is built successfully.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(661)::BuildTrtEngine      Serialize TensorRTEngine to local file /root/.paddlex/official_models/PP-OCRv5_server_det/.cache/tensorrt/trt_serialized.trt.
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(672)::BuildTrtEngine      TensorRTEngine is serialized to local file /root/.paddlex/official_models/PP-OCRv5_server_det/.cache/tensorrt/trt_serialized.trt, we can load this model from the serialized engine directly next time.
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('PP-OCRv5_server_rec', None)
+paddlex-server  | Using official model (PP-OCRv5_server_rec), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 560.85it/s]
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: trt_fp16,  trt_dynamic_shapes: {'x': [[1, 3, 48, 160], [1, 3, 48, 320], [8, 3, 48, 3200]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {'precision_mode': <PrecisionMode.FP16: 'FP16'>},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('PP-LCNet_x1_0_table_cls', None)
+paddlex-server  | Using official model (PP-LCNet_x1_0_table_cls), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 624.20it/s]
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: trt_fp32,  trt_dynamic_shapes: {'x': [[1, 3, 224, 224], [1, 3, 224, 224], [8, 3, 224, 224]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {'precision_mode': <PrecisionMode.FP32: 'FP32'>},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('SLANeXt_wired', None)
+paddlex-server  | Using official model (SLANeXt_wired), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 531.18it/s]
+paddlex-server  | The Paddle Inference backend is selected with the default configuration. This may not provide optimal performance.
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: paddle,  trt_dynamic_shapes: {'x': [[1, 3, 512, 512], [1, 3, 512, 512], [1, 3, 512, 512]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('SLANet_plus', None)
+paddlex-server  | Using official model (SLANet_plus), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 478.26it/s]
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: trt_fp32,  trt_dynamic_shapes: {'x': [[1, 3, 32, 32], [1, 3, 64, 448], [1, 3, 488, 488]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {'precision_mode': <PrecisionMode.FP32: 'FP32'>},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('RT-DETR-L_wired_table_cell_det', None)
+paddlex-server  | Using official model (RT-DETR-L_wired_table_cell_det), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 374.76it/s]
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: trt_fp32,  trt_dynamic_shapes: {'im_shape': [[1, 2], [1, 2], [8, 2]], 'image': [[1, 3, 640, 640], [1, 3, 640, 640], [8, 3, 640, 640]], 'scale_factor': [[1, 2], [1, 2], [8, 2]]},  trt_dynamic_shape_input_data: {'im_shape': [[640.0, 640.0], [640.0, 640.0], [640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0]], 'scale_factor': [[2.0, 2.0], [1.0, 1.0], [0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {'precision_mode': <PrecisionMode.FP32: 'FP32'>},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('RT-DETR-L_wireless_table_cell_det', None)
+paddlex-server  | Using official model (RT-DETR-L_wireless_table_cell_det), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 489.58it/s]
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: trt_fp16,  trt_dynamic_shapes: {'im_shape': [[1, 2], [1, 2], [8, 2]], 'image': [[1, 3, 640, 640], [1, 3, 640, 640], [8, 3, 640, 640]], 'scale_factor': [[1, 2], [1, 2], [8, 2]]},  trt_dynamic_shape_input_data: {'im_shape': [[640.0, 640.0], [640.0, 640.0], [640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0, 640.0]], 'scale_factor': [[2.0, 2.0], [1.0, 1.0], [0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {'precision_mode': <PrecisionMode.FP16: 'FP16'>},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | Creating model: ('PP-FormulaNet_plus-L', None)
+paddlex-server  | Using official model (PP-FormulaNet_plus-L), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 604.11it/s]
+paddlex-server  | The Paddle Inference backend is selected with the default configuration. This may not provide optimal performance.
+paddlex-server  | Using Paddle Inference backend
+paddlex-server  | Paddle predictor option: device_type: gpu,  device_id: 0,  run_mode: paddle,  trt_dynamic_shapes: {'x': [[1, 1, 768, 768], [1, 1, 768, 768], [8, 1, 768, 768]]},  cpu_threads: 10,  delete_pass: [],  enable_new_ir: True,  enable_cinn: False,  trt_cfg_setting: {},  trt_use_dynamic_shapes: True,  trt_collect_shape_range_info: True,  trt_discard_cached_shape_range_info: False,  trt_dynamic_shape_input_data: None,  trt_shape_range_info_path: None,  trt_allow_rebuild_at_runtime: True,  mkldnn_cache_capacity: 10
+paddlex-server  | [    INFO] [2025-10-07 18:39:22,610] [*] [*] - a88a6a944bf3485d9c04f30f8c2323d8 initialized successfully
+paddlex-server  | I1007 18:39:22.613361 7 python.cc:1880] TRITONBACKEND_ModelInstanceInitialize: layout-parsing_0_1 (GPU device 0)
+paddlex-server  | [    INFO] [2025-10-07 18:39:24,250] [*] [*] - Triton model config: {'name': 'layout-parsing', 'platform': '', 'backend': 'python', 'version_policy': {'latest': {'num_versions': 1}}, 'max_batch_size': 8, 'input': [{'name': 'input', 'data_type': 'TYPE_STRING', 'format': 'FORMAT_NONE', 'dims': [1], 'is_shape_tensor': False, 'allow_ragged_batch': False}], 'output': [{'name': 'output', 'data_type': 'TYPE_STRING', 'dims': [1], 'label_filename': '', 'is_shape_tensor': False}], 'batch_input': [], 'batch_output': [], 'optimization': {'priority': 'PRIORITY_DEFAULT', 'input_pinned_memory': {'enable': True}, 'output_pinned_memory': {'enable': True}, 'gather_kernel_buffer_threshold': 0, 'eager_batching': False}, 'instance_group': [{'name': 'layout-parsing_0', 'kind': 'KIND_GPU', 'count': 2, 'gpus': [0], 'secondary_devices': [], 'profile': [], 'passive': False, 'host_policy': ''}], 'default_model_filename': '', 'cc_model_filenames': {}, 'metric_tags': {}, 'parameters': {}, 'model_warmup': []}
+paddlex-server  | [    INFO] [2025-10-07 18:39:24,250] [*] [*] - Input names: ['input']
+paddlex-server  | [    INFO] [2025-10-07 18:39:24,250] [*] [*] - Output names: ['output']
+paddlex-server  | Creating model: ('PP-LCNet_x1_0_doc_ori', None)
+paddlex-server  | Using official model (PP-LCNet_x1_0_doc_ori), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 4065.56it/s]
+paddlex-server  | TensorRT dynamic shapes will be loaded from the file.
+paddlex-server  | Inference backend: tensorrt
+paddlex-server  | Inference backend config: precision='fp16' use_dynamic_shapes=True dynamic_shapes={'x': [[1, 3, 224, 224], [1, 3, 224, 224], [8, 3, 224, 224]]}
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(719)::CreateTrtEngineFromOnnx     Detect serialized TensorRT Engine file in /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori/.cache/tensorrt/trt_serialized.trt, will load it directly.
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: x, shape: [8, 3, 224, 224], The shape range before: min_shape=[-1, 3, 224, 224], max_shape=[-1, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[8, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(40)::Update  [New Shape Out of Range] input name: x, shape: [1, 3, 224, 224], The shape range before: min_shape=[8, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [WARNING] ultra_infer/runtime/backends/tensorrt/utils.cc(52)::Update  [New Shape Out of Range] The updated shape range now: min_shape=[1, 3, 224, 224], max_shape=[8, 3, 224, 224].
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(108)::LoadTrtCache        Build TensorRT Engine from cache file: /root/.paddlex/official_models/PP-LCNet_x1_0_doc_ori/.cache/tensorrt/trt_serialized.trt with shape range information as below,
+paddlex-server  | [INFO] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(111)::LoadTrtCache        Input name: x, shape=[-1, 3, 224, 224], min=[1, 3, 224, 224], max=[8, 3, 224, 224]
+paddlex-server  | 
+paddlex-server  | [ERROR] ultra_infer/runtime/backends/tensorrt/trt_backend.cc(239)::log        3: [runtime.cpp::~Runtime::346] Error Code 3: API Usage Error (Parameter check failed at: runtime/rt/runtime.cpp::~Runtime::346, condition: mEngineCounter.use_count() == 1. Destroying a runtime before destroying deserialized engines created by the runtime leads to undefined behavior.
+paddlex-server  | )
+paddlex-server  | [INFO] ultra_infer/runtime/runtime.cc(320)::CreateTrtBackend  Runtime initialized with Backend::TRT in Device::GPU.
+paddlex-server  | Creating model: ('UVDoc', None)
+paddlex-server  | Using official model (UVDoc), the model files will be automatically downloaded and saved in /root/.paddlex/official_models.
+Fetching 6 files: 100%|██████████| 6/6 [00:00<00:00, 720.34it/s]
+paddlex-server  | 1007 18:39:29.019181 1293 pb_stub.cc:352] Failed to initialize Python stub: RuntimeError: No inference backend and configuration could be suggested. Reason: 'tensorrt' is not a supported inference backend.
+paddlex-server  | 
+paddlex-server  | At:
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(625): _determine_backend_and_config
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(570): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(148): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/base/predictor/base_predictor.py(242): create_static_infer
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(70): _build
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(41): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/__init__.py(77): create_predictor
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(107): create_model
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/doc_preprocessor/pipeline.py(75): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(140): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(120): inintial_predictor
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(82): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(134): _create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(62): initialize
+paddlex-server  |   /paddlex/var/paddlex_model_repo/layout-parsing/1/model.py(20): initialize
+paddlex-server  | 
+paddlex-server  | free(): invalid pointer
+paddlex-server  | 
+paddlex-server  | 
+paddlex-server  | --------------------------------------
+paddlex-server  | C++ Traceback (most recent call last):
+paddlex-server  | --------------------------------------
+paddlex-server  | No stack trace in paddle, may be caused by external reasons.
+paddlex-server  | 
+paddlex-server  | ----------------------
+paddlex-server  | Error Message Summary:
+paddlex-server  | ----------------------
+paddlex-server  | FatalError: `Process abort signal` is detected by the operating system.
+paddlex-server  |   [TimeInfo: *** Aborted at 1759862370 (unix time) try "date -d @1759862370" if you are using GNU date ***]
+paddlex-server  |   [SignalInfo: *** SIGABRT (@0x31) received by PID 49 (TID 0x770b51702000) from PID 49 ***]
+paddlex-server  | 
+paddlex-server  | E1007 18:39:30.850097 7 model_repository_manager.cc:1186] failed to load 'layout-parsing' version 1: Internal: RuntimeError: No inference backend and configuration could be suggested. Reason: 'tensorrt' is not a supported inference backend.
+paddlex-server  | 
+paddlex-server  | At:
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(625): _determine_backend_and_config
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(570): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(148): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/base/predictor/base_predictor.py(242): create_static_infer
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(70): _build
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(41): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/__init__.py(77): create_predictor
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(107): create_model
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/doc_preprocessor/pipeline.py(75): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(140): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(120): inintial_predictor
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(82): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(134): _create_pipeline
+paddlex-server  |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(62): initialize
+paddlex-server  |   /paddlex/var/paddlex_model_repo/layout-parsing/1/model.py(20): initialize
+paddlex-server  | 
+paddlex-server  | I1007 18:39:30.850184 7 server.cc:522] 
+paddlex-server  | +------------------+------+
+paddlex-server  | | Repository Agent | Path |
+paddlex-server  | +------------------+------+
+paddlex-server  | +------------------+------+
+paddlex-server  | 
+paddlex-server  | I1007 18:39:30.850192 7 server.cc:549] 
+paddlex-server  | +---------+------+--------+
+paddlex-server  | | Backend | Path | Config |
+paddlex-server  | +---------+------+--------+
+paddlex-server  | +---------+------+--------+
+paddlex-server  | 
+paddlex-server  | I1007 18:39:30.850219 7 server.cc:592] 
+paddlex-server  | +----------------+---------+----------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | | Model          | Version | Status                                                                                                                                                   |
+paddlex-server  | +----------------+---------+----------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | | layout-parsing | 1       | UNAVAILABLE: Internal: RuntimeError: No inference backend and configuration could be suggested. Reason: 'tensorrt' is not a supported inference backend. |
+paddlex-server  | |                |         |                                                                                                                                                          |
+paddlex-server  | |                |         | At:                                                                                                                                                      |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(625): _determine_backend_and_config                        |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/common/static_infer.py(570): __init__                                             |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(148): _wrapper                                                                       |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/base/predictor/base_predictor.py(242): create_static_infer                        |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(70): _build                                          |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/image_unwarping/predictor.py(41): __init__                                        |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/models/__init__.py(77): create_predictor                                                 |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(107): create_model                                                     |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/doc_preprocessor/pipeline.py(75): __init__                                     |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline                                   |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__                                                    |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper                                                                       |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline                                              |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/base.py(140): create_pipeline                                                  |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(120): inintial_predictor                         |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/layout_parsing/pipeline_v2.py(82): __init__                                    |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(158): _create_internal_pipeline                                   |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/_parallel.py(103): __init__                                                    |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/utils/deps.py(195): _wrapper                                                                       |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex/inference/pipelines/__init__.py(166): create_pipeline                                              |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(134): _create_pipeline                                                    |
+paddlex-server  | |                |         |   /paddlex/py310/lib/python3.10/site-packages/paddlex_hps_server/base_model.py(62): initialize                                                           |
+paddlex-server  | |                |         |   /paddlex/var/paddlex_model_repo/layout-parsing/1/model.py(20): initialize                                                                              |
+paddlex-server  | +----------------+---------+----------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | 
+paddlex-server  | I1007 18:39:30.850262 7 tritonserver.cc:1920] 
+paddlex-server  | +----------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | | Option                           | Value                                                                                                                                                                                  |
+paddlex-server  | +----------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | | server_id                        | triton                                                                                                                                                                                 |
+paddlex-server  | | server_version                   | 2.15.0                                                                                                                                                                                 |
+paddlex-server  | | server_extensions                | classification sequence model_repository model_repository(unload_dependents) schedule_policy model_configuration system_shared_memory cuda_shared_memory binary_tensor_data statistics |
+paddlex-server  | | model_repository_path[0]         | /paddlex/var/paddlex_model_repo                                                                                                                                                        |
+paddlex-server  | | model_control_mode               | MODE_NONE                                                                                                                                                                              |
+paddlex-server  | | strict_model_config              | 1                                                                                                                                                                                      |
+paddlex-server  | | rate_limit                       | OFF                                                                                                                                                                                    |
+paddlex-server  | | pinned_memory_pool_byte_size     | 268435456                                                                                                                                                                              |
+paddlex-server  | | cuda_memory_pool_byte_size{0}    | 67108864                                                                                                                                                                               |
+paddlex-server  | | response_cache_byte_size         | 0                                                                                                                                                                                      |
+paddlex-server  | | min_supported_compute_capability | 6.0                                                                                                                                                                                    |
+paddlex-server  | | strict_readiness                 | 1                                                                                                                                                                                      |
+paddlex-server  | | exit_timeout                     | 30                                                                                                                                                                                     |
+paddlex-server  | +----------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+paddlex-server  | 
+paddlex-server  | I1007 18:39:30.850264 7 server.cc:252] Waiting for in-flight requests to complete.
+paddlex-server  | I1007 18:39:30.850266 7 server.cc:267] Timeout 30: Found 0 live models and 0 in-flight non-inference requests
+paddlex-server  | error: creating server: Internal - failed to load all models
+paddlex-server exited with code 1
+(base) aayush_shah@aniketagrawal-2N452L27HKPC:~/paddle$ ^C
+(base) aayush_shah@aniketagrawal-2N452L27HKPC:~/paddle$ 
