@@ -6,10 +6,13 @@ services:
     container_name: paddlex-server
     environment:
       - PADDLEX_HPS_DEVICE_TYPE=gpu
+      - TRITON_INSTANCE_COUNT=10
+      - TRITON_INSTANCE_STATUS_HOST=0.0.0.0
+      - TRITON_INSTANCE_STATUS_PORT=8081
     volumes:
 #      - .:/app                 # mount current dir to /app
       - ./config_gpu.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
-#      - ./paddlex/official_models:/root/.paddlex/official_models
+      - ./paddlex/official_models:/root/.paddlex/official_models
     ports:
       - "8000:8000"            # Triton HTTP endpoint
       - "8001:8001"           # Triton gRPC endpoint
