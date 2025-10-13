@@ -6,6 +6,7 @@ import logging
 import multiprocessing
 import os
 import queue
+import re
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -188,10 +189,68 @@ def _infer_configured_instance_count(model_config: Any) -> int:
     return max(total, 0)
 
 
-def _update_total_instance_counter(candidate_total: int):
+def _candidate_config_paths(args: Any) -> List[str]:
+    candidates: List[str] = []
+
+    def _add(path: Optional[str]):
+        if path and path not in candidates:
+            candidates.append(path)
+
+    directories: List[str] = []
+
+    def _add_directory(path: Optional[str]):
+        if path and path not in directories:
+            directories.append(path)
+
+    if isinstance(args, dict):
+        model_dir = args.get("model_directory")
+        if model_dir:
+            _add_directory(model_dir)
+        repo_dir = args.get("model_repository")
+        if repo_dir:
+            _add_directory(repo_dir)
+            model_version = args.get("model_version")
+            if model_version:
+                _add_directory(os.path.join(repo_dir, model_version))
+
+    module_dir = os.path.dirname(__file__)
+    _add_directory(module_dir)
+    _add_directory(os.path.dirname(module_dir))
+
+    for directory in directories:
+        _add(os.path.join(directory, "config_gpu.pbtxt"))
+        _add(os.path.join(directory, "config.pbtxt"))
+        _add(os.path.join(directory, "config_cpu.pbtxt"))
+
+    env_config_path = os.environ.get("TRITON_MODEL_CONFIG_PATH")
+    _add(env_config_path)
+    return candidates
+
+
+def _infer_instance_count_from_config_files(args: Any) -> int:
+    for path in _candidate_config_paths(args):
+        try:
+            with open(path, "r", encoding="utf-8") as config_file:
+                contents = config_file.read()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            _LOGGER.debug("Failed to read config file %s: %s", path, exc)
+            continue
+        matches = re.findall(r"\bcount\s*:\s*(\d+)", contents)
+        candidate_total = sum(int(match) for match in matches)
+        if candidate_total > 0:
+            return candidate_total
+    return 0
+
+
+def _update_total_instance_counter(candidate_total: int, *, force: bool = False):
     if candidate_total <= 0:
         return
     with _activity_lock:
+        if force or _total_instance_counter.value <= 0:
+            _total_instance_counter.value = candidate_total
+            return
         # Keep the highest observed value to handle multiple worker initializations
         # racing to report their configured instance counts.
         _total_instance_counter.value = max(
@@ -215,6 +274,12 @@ try:
     _start_status_server_if_needed()
 except Exception as exc:  # pragma: no cover - defensive guard
     _LOGGER.exception("Failed to start instance status server: %s", exc)
+
+_initial_config_total = _infer_instance_count_from_config_files(
+    {"model_directory": os.path.dirname(__file__)}
+)
+if _initial_config_total > 0:
+    _update_total_instance_counter(_initial_config_total, force=True)
 
 
 class TritonPythonModel(BaseTritonPythonModel):
@@ -273,7 +338,14 @@ class TritonPythonModel(BaseTritonPythonModel):
                 configured_instances = max(configured_instances, int(env_override))
             except ValueError:
                 pass
-        _update_total_instance_counter(configured_instances)
+        force_total_update = False
+        file_override = _infer_instance_count_from_config_files(args)
+        if file_override > 0:
+            configured_instances = file_override
+            force_total_update = True
+        _update_total_instance_counter(
+            configured_instances, force=force_total_update
+        )
         _start_status_server_if_needed()
 
     def get_input_model_type(self):
