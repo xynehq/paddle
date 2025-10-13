@@ -23,7 +23,7 @@ SubModules:
     batch_size: 8
     use_hpip: True
     hpi_config:
-      backend: paddle
+      backend: onnxruntime
     threshold:
       0: 0.3
       1: 0.5
@@ -87,7 +87,7 @@ SubModules:
     layout_merge_bboxes_mode: "small"
     use_hpip: True
     hpi_config:
-        backend: paddle
+        backend: onnxruntime
 
 SubPipelines:
   DocPreprocessor:
@@ -103,7 +103,7 @@ SubPipelines:
         batch_size: 8
         use_hpip: True
         hpi_config:
-          backend: paddle
+          backend: onnxruntime
       DocUnwarping:
         module_name: image_unwarping
         model_name: UVDoc
@@ -139,7 +139,7 @@ SubPipelines:
         batch_size: 8
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
 
         
       TextRecognition:
@@ -148,7 +148,7 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
         batch_size: 8
         score_thresh: 0.0
 
@@ -164,14 +164,14 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
       WiredTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANeXt_wired
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
       WirelessTableStructureRecognition:
         module_name: table_structure_recognition
         model_name: SLANet_plus
@@ -184,21 +184,21 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle       
+            backend: onnxruntime
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle       
+            backend: onnxruntime
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -226,14 +226,14 @@ SubPipelines:
             batch_size: 8
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             batch_size: 8
         score_thresh: 0.0
 
@@ -256,7 +256,7 @@ SubPipelines:
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -269,7 +269,7 @@ SubPipelines:
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             batch_size: 8
             score_thresh: 0
 
@@ -294,21 +294,21 @@ SubPipelines:
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle
+            backend: onnxruntime
       WirelessTableCellsDetection:
         module_name: table_cells_detection
         model_name: RT-DETR-L_wireless_table_cell_det
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle       
+            backend: onnxruntime
       TableOrientationClassify:
         module_name: doc_text_orientation
         model_name: PP-LCNet_x1_0_doc_ori
         model_dir: null
         use_hpip: True
         hpi_config:
-            backend: paddle       
+            backend: onnxruntime
     SubPipelines:
       GeneralOCR:
         pipeline_name: OCR
@@ -336,20 +336,20 @@ SubPipelines:
             batch_size: 8
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
           TextRecognition:
             module_name: text_recognition
             model_name: PP-OCRv5_server_rec
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             batch_size: 8
         score_thresh: 0.0
 
   SealRecognition:
     pipeline_name: seal_recognition
-    batch_size: 8
+    batch_size: 7
     use_layout_detection: False
     use_doc_preprocessor: False
     SubPipelines:
@@ -366,7 +366,7 @@ SubPipelines:
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             limit_side_len: 736
             limit_type: min
             max_side_limit: 4000
@@ -379,7 +379,7 @@ SubPipelines:
             model_dir: null
             use_hpip: True
             hpi_config:
-                backend: paddle
+                backend: onnxruntime
             batch_size: 8
             score_thresh: 0
 
