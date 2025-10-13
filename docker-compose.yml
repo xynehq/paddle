@@ -7,9 +7,9 @@ services:
     environment:
       - PADDLEX_HPS_DEVICE_TYPE=gpu
     volumes:
-      - .:/app                 # mount current dir to /app
+#      - .:/app                 # mount current dir to /app
       - ./config_gpu.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
-      - ./paddlex/official_models:/root/.paddlex/official_models
+#      - ./paddlex/official_models:/root/.paddlex/official_models
     ports:
       - "8000:8000"            # expose port 8080 from container to host
       - "8001:8001"
