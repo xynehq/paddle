@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 _STATUS_SERVER_HOST = os.environ.get("TRITON_INSTANCE_STATUS_HOST", "0.0.0.0")
 _STATUS_SERVER_PORT = int(os.environ.get("TRITON_INSTANCE_STATUS_PORT", "8081"))
 _STATUS_ENDPOINT_PATH = os.environ.get("TRITON_INSTANCE_STATUS_PATH", "/instance_status")
-_STATUS_FILE = Path("/tmp/triton_instance_status.json")
+_STATUS_FILE_PATTERN = "/tmp/triton_instance_status_*.json"
 
 
 class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
@@ -47,19 +47,38 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Not Found")
                 return
 
-            # Read status from file
+            # Aggregate status from all instance files
             try:
-                if _STATUS_FILE.exists():
-                    with open(_STATUS_FILE, 'r') as f:
-                        status_data = json.load(f)
-                else:
+                status_files = list(Path("/tmp").glob("triton_instance_status_*.json"))
+                
+                if not status_files:
                     status_data = {
                         "active_instances": 0,
                         "configured_instances": 0,
                         "idle_instances": 0
                     }
+                else:
+                    aggregate = {
+                        "active_instances": 0,
+                        "configured_instances": 0,
+                        "idle_instances": 0
+                    }
+                    
+                    for status_file in status_files:
+                        try:
+                            with open(status_file, 'r') as f:
+                                data = json.load(f)
+                            aggregate["active_instances"] += data.get("active_instances", 0)
+                            aggregate["configured_instances"] += data.get("configured_instances", 0)
+                            aggregate["idle_instances"] += data.get("idle_instances", 0)
+                        except Exception as e:
+                            _LOGGER.debug(f"Failed to read {status_file}: {e}")
+                            continue
+                    
+                    status_data = aggregate
+                    
             except Exception as e:
-                _LOGGER.error(f"Error reading status file: {e}")
+                _LOGGER.error(f"Error aggregating status files: {e}")
                 status_data = {
                     "active_instances": 0,
                     "configured_instances": 0,
