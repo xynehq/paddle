@@ -48,7 +48,10 @@ _LOGGER = logging.getLogger(__name__)
 _activity_lock = threading.Lock()
 _active_request_counter = 0
 _total_instance_counter = 0
-_STATUS_FILE = "/tmp/triton_instance_status.json"
+
+# Use per-instance status files to avoid race conditions
+_INSTANCE_ID = os.environ.get("TRITON_SERVER_INSTANCE_ID", str(os.getpid()))
+_STATUS_FILE = f"/tmp/triton_instance_status_{_INSTANCE_ID}.json"
 
 
 def _write_status_to_file():
