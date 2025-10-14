@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import queue
 import re
+import socket
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -64,6 +65,8 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
             normalized_endpoint = _STATUS_ENDPOINT_PATH.rstrip("/") or "/"
             if normalized_path != normalized_endpoint:
                 self.send_response(404)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", "9")
                 self.end_headers()
                 self.wfile.write(b"Not Found")
                 return
@@ -81,21 +84,28 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                 finally:
                     _activity_lock.release()
 
-            idle = max(total - active, 0) if total > 0 else None
+            # Ensure we always have valid values
+            active = max(0, active)
+            total = max(0, total)
+            idle = max(total - active, 0)
+            
             payload = {
                 "active_instances": active,
                 "configured_instances": total,
+                "idle_instances": idle,
             }
-            if idle is not None:
-                payload["idle_instances"] = idle
             response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(response)))
+            self.send_header("Connection", "close")  # Ensure connection closes
             self.end_headers()
             self.wfile.write(response)
             self.wfile.flush()
+        except BrokenPipeError:
+            # Client disconnected, ignore
+            pass
         except Exception as e:
             _LOGGER.error(f"Error in status handler: {e}")
             try:
@@ -136,6 +146,9 @@ def _start_status_server_if_needed():
                 (_STATUS_SERVER_HOST, _STATUS_SERVER_PORT),
                 _InstanceStatusRequestHandler,
             )
+            # Set socket options for better Docker compatibility
+            httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            httpd.timeout = 30  # Set timeout to prevent hanging connections
         except OSError as exc:
             _LOGGER.warning(
                 "Instance status server failed to bind %s:%s (%s)",
@@ -143,11 +156,22 @@ def _start_status_server_if_needed():
                 _STATUS_SERVER_PORT,
                 exc,
             )
+            with _status_server_lock:
+                global _status_server_started
+                _status_server_started = False
             return
 
         _status_httpd = httpd
+        _LOGGER.info(
+            "Instance status server started on %s:%s%s",
+            _STATUS_SERVER_HOST,
+            _STATUS_SERVER_PORT,
+            _STATUS_ENDPOINT_PATH,
+        )
         try:
             httpd.serve_forever()
+        except Exception as exc:
+            _LOGGER.error("Instance status server error: %s", exc)
         finally:
             httpd.server_close()
             _status_httpd = None
