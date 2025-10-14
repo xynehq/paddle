@@ -26,7 +26,7 @@ _STATUS_ENDPOINT_PATH = os.environ.get(
 _STATUS_FILE_PATTERN = "triton_instance_status_*.json"
 _STATUS_DIR = Path("/tmp")
 _STATUS_FILE_TTL_SECONDS = float(
-    os.environ.get("TRITON_INSTANCE_STATUS_TTL_SECONDS", "5.0")
+    os.environ.get("TRITON_INSTANCE_STATUS_TTL_SECONDS", "15.0")
 )
 
 
@@ -54,7 +54,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
 
             now = time.time()
             aggregate = {"active_instances": 0, "configured_instances": 0}
-            stale_entries = []
+            stale_entries = False
 
             for status_file in _STATUS_DIR.glob(_STATUS_FILE_PATTERN):
                 try:
@@ -85,7 +85,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                                 is_stale = True
 
                     if is_stale:
-                        stale_entries.append((status_file, age))
+                        stale_entries = True
                         _LOGGER.debug(
                             "Skipping stale status file %s (age %.1fs)",
                             status_file,
@@ -98,18 +98,6 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                     )
                 except Exception as exc:
                     _LOGGER.debug("Failed to read %s: %s", status_file, exc)
-
-            if stale_entries and _STATUS_FILE_TTL_SECONDS > 0:
-                for status_file, age in stale_entries:
-                    try:
-                        status_file.unlink(missing_ok=True)
-                    except Exception as exc:
-                        _LOGGER.debug(
-                            "Failed to remove stale status file %s (age %.1fs): %s",
-                            status_file,
-                            age if age is not None else float("nan"),
-                            exc,
-                        )
 
             aggregate["idle_instances"] = max(
                 aggregate["configured_instances"] - aggregate["active_instances"], 0
