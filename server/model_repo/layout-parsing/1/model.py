@@ -88,6 +88,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(response)))
         self.end_headers()
         self.wfile.write(response)
+        self.wfile.flush()  # Explicitly flush the response
 
     def log_message(self, format, *args):
         return
