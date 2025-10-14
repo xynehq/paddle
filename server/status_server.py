@@ -25,7 +25,6 @@ _STATUS_ENDPOINT_PATH = os.environ.get(
 )
 _STATUS_FILE_PATTERN = "triton_instance_status_*.json"
 _STATUS_DIR = Path("/tmp")
-_STALE_THRESHOLD = 30  # seconds
 
 
 class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
@@ -57,9 +56,6 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                 try:
                     stat_info = status_file.stat()
                     if stat_info.st_size == 0 or status_file.suffix == ".tmp":
-                        continue
-                    if now - stat_info.st_mtime > _STALE_THRESHOLD:
-                        status_file.unlink(missing_ok=True)
                         continue
                     with status_file.open("r", encoding="utf-8") as handle:
                         data = json.load(handle)
