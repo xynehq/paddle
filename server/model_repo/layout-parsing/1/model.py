@@ -141,7 +141,11 @@ def _cleanup_status_file():
 def _maybe_trim_gpu_cache():
     global _trim_cache_counter
     try:
-        paddle.device.cuda.synchronize()
+        sync = getattr(paddle.device, "synchronize", None)
+        if callable(sync):
+            sync()
+        else:
+            paddle.device.cuda.synchronize()
     except Exception:
         return
     gc.collect()
