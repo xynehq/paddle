@@ -25,6 +25,9 @@ _STATUS_ENDPOINT_PATH = os.environ.get(
 )
 _STATUS_FILE_PATTERN = "triton_instance_status_*.json"
 _STATUS_DIR = Path("/tmp")
+_STATUS_FILE_TTL_SECONDS = float(
+    os.environ.get("TRITON_INSTANCE_STATUS_TTL_SECONDS", "5.0")
+)
 
 
 class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
@@ -51,6 +54,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
 
             now = time.time()
             aggregate = {"active_instances": 0, "configured_instances": 0}
+            stale_entries = []
 
             for status_file in _STATUS_DIR.glob(_STATUS_FILE_PATTERN):
                 try:
@@ -59,15 +63,53 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                         continue
                     with status_file.open("r", encoding="utf-8") as handle:
                         data = json.load(handle)
-                    aggregate["active_instances"] += int(
-                        data.get("active_instances", 0)
-                    )
                     configured = int(data.get("configured_instances", 0))
                     aggregate["configured_instances"] = max(
                         aggregate["configured_instances"], configured
                     )
+
+                    is_stale = False
+                    age = None
+                    if _STATUS_FILE_TTL_SECONDS > 0:
+                        last_updated_raw = data.get("last_updated")
+                        try:
+                            last_updated_ts = float(last_updated_raw)
+                        except (TypeError, ValueError):
+                            last_updated_ts = None
+
+                        if last_updated_ts is None:
+                            is_stale = True
+                        else:
+                            age = max(now - last_updated_ts, 0.0)
+                            if age > _STATUS_FILE_TTL_SECONDS:
+                                is_stale = True
+
+                    if is_stale:
+                        stale_entries.append((status_file, age))
+                        _LOGGER.debug(
+                            "Skipping stale status file %s (age %.1fs)",
+                            status_file,
+                            age if age is not None else float("nan"),
+                        )
+                        continue
+
+                    aggregate["active_instances"] += int(
+                        data.get("active_instances", 0)
+                    )
                 except Exception as exc:
                     _LOGGER.debug("Failed to read %s: %s", status_file, exc)
+
+            if stale_entries and _STATUS_FILE_TTL_SECONDS > 0:
+                for status_file, age in stale_entries:
+                    try:
+                        status_file.unlink(missing_ok=True)
+                    except Exception as exc:
+                        _LOGGER.debug(
+                            "Failed to remove stale status file %s (age %.1fs): %s",
+                            status_file,
+                            age if age is not None else float("nan"),
+                            exc,
+                        )
 
             aggregate["idle_instances"] = max(
                 aggregate["configured_instances"] - aggregate["active_instances"], 0
