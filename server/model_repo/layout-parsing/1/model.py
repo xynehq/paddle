@@ -48,135 +48,29 @@ _LOGGER = logging.getLogger(__name__)
 _activity_lock = threading.Lock()
 _active_request_counter = 0
 _total_instance_counter = 0
-_status_server_lock = threading.Lock()
-_status_server_started = False
-_status_httpd: Optional[HTTPServer] = None
+_STATUS_FILE = "/tmp/triton_instance_status.json"
 
 
-class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
-    daemon_threads = True
-    allow_reuse_address = True
-
-
-class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        try:
-            normalized_path = self.path.rstrip("/") or "/"
-            normalized_endpoint = _STATUS_ENDPOINT_PATH.rstrip("/") or "/"
-            if normalized_path != normalized_endpoint:
-                self.send_response(404)
-                self.send_header("Content-Type", "text/plain")
-                self.send_header("Content-Length", "9")
-                self.end_headers()
-                self.wfile.write(b"Not Found")
-                return
-
-            # Use a timeout on the lock to prevent hanging
-            lock_acquired = _activity_lock.acquire(timeout=1.0)
-            if not lock_acquired:
-                # If we can't acquire the lock, return current best-effort values
-                active = 0
-                total = 0
-            else:
-                try:
-                    active = _active_request_counter
-                    total = _total_instance_counter
-                finally:
-                    _activity_lock.release()
-
-            # Ensure we always have valid values
-            active = max(0, active)
-            total = max(0, total)
-            idle = max(total - active, 0)
-            
-            payload = {
-                "active_instances": active,
-                "configured_instances": total,
-                "idle_instances": idle,
-            }
-            response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.send_header("Connection", "close")  # Ensure connection closes
-            self.end_headers()
-            self.wfile.write(response)
-            self.wfile.flush()
-        except BrokenPipeError:
-            # Client disconnected, ignore
-            pass
-        except Exception as e:
-            _LOGGER.error(f"Error in status handler: {e}")
-            try:
-                self.send_error(500, f"Internal error: {e}")
-            except:
-                pass
-
-    def log_message(self, format, *args):
-        return
-
-
-def _shutdown_status_server():
-    global _status_httpd, _status_server_started
-    if _status_httpd is not None:
-        try:
-            _status_httpd.shutdown()
-            _status_httpd.server_close()
-        except Exception:
-            pass
-        finally:
-            _status_httpd = None
-    with _status_server_lock:
-        _status_server_started = False
-
-
-def _start_status_server_if_needed():
-    global _status_server_started
-
-    with _status_server_lock:
-        if _status_server_started:
-            return
-        _status_server_started = True
-
-    def _serve():
-        global _status_httpd
-        try:
-            httpd = _ThreadedHTTPServer(
-                (_STATUS_SERVER_HOST, _STATUS_SERVER_PORT),
-                _InstanceStatusRequestHandler,
-            )
-            # Set socket options for better Docker compatibility
-            httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            httpd.timeout = 30  # Set timeout to prevent hanging connections
-        except OSError as exc:
-            _LOGGER.warning(
-                "Instance status server failed to bind %s:%s (%s)",
-                _STATUS_SERVER_HOST,
-                _STATUS_SERVER_PORT,
-                exc,
-            )
-            with _status_server_lock:
-                global _status_server_started
-                _status_server_started = False
-            return
-
-        _status_httpd = httpd
-        _LOGGER.info(
-            "Instance status server started on %s:%s%s",
-            _STATUS_SERVER_HOST,
-            _STATUS_SERVER_PORT,
-            _STATUS_ENDPOINT_PATH,
-        )
-        try:
-            httpd.serve_forever()
-        except Exception as exc:
-            _LOGGER.error("Instance status server error: %s", exc)
-        finally:
-            httpd.server_close()
-            _status_httpd = None
-
-    threading.Thread(target=_serve, daemon=True).start()
+def _write_status_to_file():
+    """Write current status to file for the standalone server to read."""
+    try:
+        with _activity_lock:
+            active = _active_request_counter
+            total = _total_instance_counter
+        
+        status_data = {
+            "active_instances": max(0, active),
+            "configured_instances": max(0, total),
+            "idle_instances": max(0, total - active)
+        }
+        
+        # Write atomically by writing to temp file then renaming
+        temp_file = _STATUS_FILE + ".tmp"
+        with open(temp_file, 'w') as f:
+            json.dump(status_data, f)
+        os.rename(temp_file, _STATUS_FILE)
+    except Exception as e:
+        _LOGGER.debug(f"Failed to write status file: {e}")
 
 
 @contextmanager
@@ -184,11 +78,13 @@ def _track_active_requests():
     global _active_request_counter
     with _activity_lock:
         _active_request_counter += 1
+    _write_status_to_file()
     try:
         yield
     finally:
         with _activity_lock:
             _active_request_counter = max(_active_request_counter - 1, 0)
+        _write_status_to_file()
 
 
 def _infer_configured_instance_count(model_config: Any) -> int:
@@ -294,28 +190,26 @@ def _update_total_instance_counter(candidate_total: int, *, force: bool = False)
         _total_instance_counter = max(_total_instance_counter, candidate_total)
 
 
-atexit.register(_shutdown_status_server)
+# Initialize status file with default values
+_write_status_to_file()
 
 _initial_instance_env = os.environ.get("TRITON_INSTANCE_COUNT")
 if _initial_instance_env:
     try:
         _update_total_instance_counter(int(_initial_instance_env))
+        _write_status_to_file()
     except ValueError:
         _LOGGER.warning(
             "Ignored invalid TRITON_INSTANCE_COUNT value: %s",
             _initial_instance_env,
         )
 
-try:
-    _start_status_server_if_needed()
-except Exception as exc:  # pragma: no cover - defensive guard
-    _LOGGER.exception("Failed to start instance status server: %s", exc)
-
 _initial_config_total = _infer_instance_count_from_config_files(
     {"model_directory": os.path.dirname(__file__)}
 )
 if _initial_config_total > 0:
     _update_total_instance_counter(_initial_config_total, force=True)
+    _write_status_to_file()
 
 
 class TritonPythonModel(BaseTritonPythonModel):
@@ -382,7 +276,7 @@ class TritonPythonModel(BaseTritonPythonModel):
         _update_total_instance_counter(
             configured_instances, force=force_total_update
         )
-        _start_status_server_if_needed()
+        _write_status_to_file()
 
     def get_input_model_type(self):
         return schemas.pp_structurev3.InferRequest
