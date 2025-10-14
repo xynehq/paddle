@@ -68,15 +68,19 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                         try:
                             with open(status_file, 'r') as f:
                                 data = json.load(f)
-                            # Sum active and idle instances across all processes
+                            # Sum active instances across all processes
                             aggregate["active_instances"] += int(data.get("active_instances", 0))
-                            aggregate["idle_instances"] += int(data.get("idle_instances", 0))
                             # Take max of configured_instances since all processes report the same total
                             cfg = int(data.get("configured_instances", 0))
                             aggregate["configured_instances"] = max(aggregate["configured_instances"], cfg)
                         except Exception as e:
                             _LOGGER.debug(f"Failed to read {status_file}: {e}")
                             continue
+                    
+                    # Recompute idle globally instead of summing local values
+                    aggregate["idle_instances"] = max(
+                        aggregate["configured_instances"] - aggregate["active_instances"], 0
+                    )
                     
                     status_data = aggregate
                     
