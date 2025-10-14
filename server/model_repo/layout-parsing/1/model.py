@@ -43,13 +43,10 @@ _STATUS_ENDPOINT_PATH: Final[str] = os.environ.get(
 
 _LOGGER = logging.getLogger(__name__)
 
-try:
-    _mp_ctx = multiprocessing.get_context("fork")
-except ValueError:
-    _mp_ctx = multiprocessing.get_context()
-_activity_lock = _mp_ctx.Lock()
-_active_request_counter = _mp_ctx.Value("i", 0)
-_total_instance_counter = _mp_ctx.Value("i", 0)
+# Use threading instead of multiprocessing for better compatibility
+_activity_lock = threading.Lock()
+_active_request_counter = 0
+_total_instance_counter = 0
 _status_server_lock = threading.Lock()
 _status_server_started = False
 _status_httpd: Optional[HTTPServer] = None
@@ -62,33 +59,49 @@ class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
 
 class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        normalized_path = self.path.rstrip("/") or "/"
-        normalized_endpoint = _STATUS_ENDPOINT_PATH.rstrip("/") or "/"
-        if normalized_path != normalized_endpoint:
-            self.send_response(404)
+        try:
+            normalized_path = self.path.rstrip("/") or "/"
+            normalized_endpoint = _STATUS_ENDPOINT_PATH.rstrip("/") or "/"
+            if normalized_path != normalized_endpoint:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Not Found")
+                return
+
+            # Use a timeout on the lock to prevent hanging
+            lock_acquired = _activity_lock.acquire(timeout=1.0)
+            if not lock_acquired:
+                # If we can't acquire the lock, return current best-effort values
+                active = 0
+                total = 0
+            else:
+                try:
+                    active = _active_request_counter
+                    total = _total_instance_counter
+                finally:
+                    _activity_lock.release()
+
+            idle = max(total - active, 0) if total > 0 else None
+            payload = {
+                "active_instances": active,
+                "configured_instances": total,
+            }
+            if idle is not None:
+                payload["idle_instances"] = idle
+            response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
             self.end_headers()
-            self.wfile.write(b"Not Found")
-            return
-
-        with _activity_lock:
-            active = _active_request_counter.value
-            total = _total_instance_counter.value
-
-        idle = max(total - active, 0) if total > 0 else None
-        payload = {
-            "active_instances": active,
-            "configured_instances": total,
-        }
-        if idle is not None:
-            payload["idle_instances"] = idle
-        response = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(response)))
-        self.end_headers()
-        self.wfile.write(response)
-        self.wfile.flush()  # Explicitly flush the response
+            self.wfile.write(response)
+            self.wfile.flush()
+        except Exception as e:
+            _LOGGER.error(f"Error in status handler: {e}")
+            try:
+                self.send_error(500, f"Internal error: {e}")
+            except:
+                pass
 
     def log_message(self, format, *args):
         return
@@ -144,15 +157,14 @@ def _start_status_server_if_needed():
 
 @contextmanager
 def _track_active_requests():
+    global _active_request_counter
     with _activity_lock:
-        _active_request_counter.value += 1
+        _active_request_counter += 1
     try:
         yield
     finally:
         with _activity_lock:
-            _active_request_counter.value = max(
-                _active_request_counter.value - 1, 0
-            )
+            _active_request_counter = max(_active_request_counter - 1, 0)
 
 
 def _infer_configured_instance_count(model_config: Any) -> int:
@@ -246,17 +258,16 @@ def _infer_instance_count_from_config_files(args: Any) -> int:
 
 
 def _update_total_instance_counter(candidate_total: int, *, force: bool = False):
+    global _total_instance_counter
     if candidate_total <= 0:
         return
     with _activity_lock:
-        if force or _total_instance_counter.value <= 0:
-            _total_instance_counter.value = candidate_total
+        if force or _total_instance_counter <= 0:
+            _total_instance_counter = candidate_total
             return
         # Keep the highest observed value to handle multiple worker initializations
         # racing to report their configured instance counts.
-        _total_instance_counter.value = max(
-            _total_instance_counter.value, candidate_total
-        )
+        _total_instance_counter = max(_total_instance_counter, candidate_total)
 
 
 atexit.register(_shutdown_status_server)
