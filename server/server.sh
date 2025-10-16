@@ -10,7 +10,7 @@ export PADDLEX_HPS_PIPELINE_CONFIG_PATH="${PADDLEX_HPS_PIPELINE_CONFIG_PATH:-$(r
 # Do we need a unique directory?
 readonly MODEL_REPO_DIR=/paddlex/var/paddlex_model_repo
 
-# rm -rf "${MODEL_REPO_DIR}"
+rm -rf "${MODEL_REPO_DIR}"
 
 cp -r model_repo "${MODEL_REPO_DIR}"
 
@@ -26,9 +26,9 @@ if [ -d shared_mods ]; then
 fi
 
 # Resolve model_dir entries dynamically based on available local models
-python3 "$(dirname "$0")/resolve_model_dirs.py" \
-    --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
-    --base-dir "/root/.paddlex/official_models"
+# python3 "$(dirname "$0")/resolve_model_dirs.py" \
+#     --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
+#     --base-dir "/root/.paddlex/official_models"
 
 # Start the standalone instance status server in the background
 python3 "$(dirname "$0")/status_server.py" &
