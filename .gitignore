@@ -1,0 +1,100 @@
+# PaddleX folder - ML models and large binary files
+paddlex/
+paddlex/**
+
+# Model parameter files (large binary files)
+*.pdparams
+*.pdiparams
+*.pdopt
+*.pdmodel
+
+# Model checkpoints and weights
+*.ckpt
+*.pth
+*.pt
+*.h5
+*.pkl
+*.pickle
+
+# Cache and temporary files
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Log files
+*.log
+logs/
+tensorboard_logs/
+LOGS.TXT
+
+# Training outputs
+output/
+outputs/
+checkpoints/
+saved_models/
+experiments/
+
+# Data files (typically large)
+*.bin
+*.dat
+*.idx
+*.npy
+*.npz
+
+# Tokenizer files (can be large)
+*.tiktoken
+vocab.txt
+merges.txt
+
+# Docker files
+Dockerfile copy.txt
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Downloaded model files
+downloads/
+.download/
+models/
+
+# Inference results
+results/
+predictions/
+inference_output/
+
+# Python packages
+*.whl
+dist/
+build/
+*.egg-info/
+
+# Server error files
+server/error.txt

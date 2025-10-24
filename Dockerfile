@@ -26,3 +26,5 @@ WORKDIR /app/server
 CMD ["/bin/bash", "server.sh"]
 EXPOSE 8000
 EXPOSE 8001
+EXPOSE 8002
+EXPOSE 8081
