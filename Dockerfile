@@ -8,7 +8,16 @@ ENV PADDLEX_HPS_DEVICE_TYPE=gpu
 RUN python3 -m pip install --no-cache-dir \
     "pymupdf>=1.24" \
     "pillow>=10.4,<11.0" \
-    "numpy>=1.24"
+    "numpy>=1.24" \
+    "PyYAML>=6.0" \
+    "safetensors>=0.4" \
+    "sentencepiece>=0.1.99" \
+    "transformers>=4.40,<5" \
+    "tritonclient[all]>=2.41,<3"
+
+# Install PyTorch (CUDA build). Adjust cu version if needed
+RUN python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu121 \
+    torch torchvision torchaudio
 
 # Set working directory inside the container
 WORKDIR /app
@@ -26,3 +35,4 @@ WORKDIR /app/server
 CMD ["/bin/bash", "server.sh"]
 EXPOSE 8000
 EXPOSE 8001
+EXPOSE 8004

@@ -3,6 +3,7 @@ import errno
 import gc
 import io
 import json
+import base64
 import logging
 import multiprocessing
 import os
@@ -14,6 +15,11 @@ import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, Final, List, Optional, Tuple
+
+try:
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover
+    yaml = None
 
 import numpy as np
 import paddle
@@ -73,6 +79,282 @@ _last_status_write = 0.0
 _status_heartbeat_stop = threading.Event()
 _status_heartbeat_thread: Optional[threading.Thread] = None
 _trim_cache_counter = 0
+
+
+# ---------------- Captioning via Triton (BLIP) -----------------
+
+class _TritonCaptionClient:
+    def __init__(self, url: str, model_name: str, timeout_ms: int = 5000):
+        self._url = url
+        self._model = model_name
+        # Track both ms (for gRPC) and seconds (for HTTP)
+        try:
+            _ms = int(timeout_ms)
+        except Exception:
+            _ms = 0
+        self._timeout_ms = _ms if _ms > 0 else None
+        self._timeout_s = (_ms / 1000.0) if _ms > 0 else None
+        self._mode = "grpc" if url.startswith("grpc://") else "http"
+        self._client = None
+
+        # Lazy-create client on first use to minimize startup impact
+
+    def _ensure_client(self):
+        if self._client is not None:
+            return
+        if self._mode == "grpc":
+            try:
+                import tritonclient.grpc as grpcclient  # type: ignore
+            except Exception as exc:  # pragma: no cover
+                raise RuntimeError(
+                    "tritonclient.grpc not available; install tritonclient"
+                ) from exc
+            url = self._url.split("grpc://", 1)[1] if self._url.startswith("grpc://") else self._url
+            self._client = grpcclient.InferenceServerClient(url=url)
+            self._grpcclient = grpcclient
+        else:
+            try:
+                import tritonclient.http as httpclient  # type: ignore
+            except Exception as exc:  # pragma: no cover
+                raise RuntimeError(
+                    "tritonclient.http not available; install tritonclient"
+                ) from exc
+            url = self._url.split("http://", 1)[1] if self._url.startswith("http://") else self._url
+            url = "http://" + url if not self._url.startswith("http://") else self._url
+            self._client = httpclient.InferenceServerClient(url=url)
+            self._httpclient = httpclient
+
+    def caption(self, image_b64: str, *, max_length: int, num_beams: int, no_repeat_ngram_size: int) -> Optional[str]:
+        try:
+            self._ensure_client()
+        except Exception as exc:
+            _LOGGER.warning("BLIP client init failed: %s", exc)
+            return None
+        payload = json.dumps(
+            dict(
+                image_b64=image_b64,
+                max_length=int(max_length),
+                num_beams=int(num_beams),
+                no_repeat_ngram_size=int(no_repeat_ngram_size),
+            )
+        ).encode("utf-8")
+        import numpy as np
+        # Triton expects dims [batch, 1]; use batch=1 => shape (1, 1)
+        obj = np.asarray([[payload]], dtype=object)
+        try:
+            print(f"[LAYOUT-PARSING] Sending caption request to {self._url} model={self._model}")
+            _LOGGER.info("Sending caption request to %s model=%s", self._url, self._model)
+            if self._mode == "grpc":
+                # Provide full tensor shape including batch: [batch, 1]
+                infer_input = self._grpcclient.InferInput("input", [1, 1], "BYTES")
+                infer_input.set_data_from_numpy(obj)
+                output = self._grpcclient.InferRequestedOutput("output")
+                resp = self._client.infer(
+                    self._model,
+                    [infer_input],
+                    model_version="",
+                    outputs=[output],
+                    timeout=self._timeout_ms,
+                )
+                out = resp.as_numpy("output")
+            else:
+                infer_input = self._httpclient.InferInput("input", [1, 1], "BYTES")
+                infer_input.set_data_from_numpy(obj)
+                output = self._httpclient.InferRequestedOutput("output")
+                resp = self._client.infer(
+                    self._model,
+                    inputs=[infer_input],
+                    outputs=[output],
+                    model_version="",
+                    timeout=self._timeout_s,
+                )
+                out = resp.as_numpy("output")
+        except Exception as call_exc:
+            import traceback as _tb
+            _LOGGER.warning("BLIP infer call failed to %s", self._url)
+            print(f"[LAYOUT-PARSING] BLIP infer call FAILED to {self._url}: {call_exc}")
+            try:
+                print(f"[LAYOUT-PARSING] EXC TYPE: {type(call_exc)} REPR: {repr(call_exc)}")
+                _tb.print_exc()
+            except Exception:
+                pass
+            return None
+        try:
+            first = out.reshape(-1)[0]
+            if hasattr(first, "tobytes"):
+                raw = first.tobytes()
+            elif isinstance(first, (bytes, bytearray)):
+                raw = bytes(first)
+            else:
+                raw = bytes(first)
+            res = json.loads(raw.decode("utf-8"))
+            if isinstance(res, dict) and res.get("caption") and not res.get("error"):
+                cap_text = str(res.get("caption"))
+                _LOGGER.info("Caption received len=%s", len(cap_text))
+                print(f"[LAYOUT-PARSING] Caption received: '{cap_text[:100]}...' (len={len(cap_text)})")
+                return cap_text[:512]
+        except Exception:
+            return None
+        return None
+
+
+def _load_caption_config() -> Dict[str, Any]:
+    cfg: Dict[str, Any] = {"captioning": {"enabled": False}}
+    cfg_path = os.path.join(os.path.dirname(__file__), "caption_config.yaml")
+    if not os.path.isfile(cfg_path):
+        return cfg
+    try:
+        if yaml is None:
+            return cfg
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        if isinstance(data, dict):
+            cfg.update(data)
+    except Exception:
+        pass
+    return cfg
+
+
+def _parse_bbox_from_img_key(img_key: str) -> Optional[Tuple[int, int, int, int]]:
+    m = re.search(r"img_in_image_box_(\d+)_(\d+)_(\d+)_(\d+)", str(img_key))
+    if not m:
+        return None
+    try:
+        return tuple(int(g) for g in m.groups())  # type: ignore
+    except Exception:
+        return None
+
+
+def _append_captions_to_pruned_result(
+    pruned_res: Dict[str, Any],
+    md_images: Dict[str, str],
+    context: Dict[str, Any],
+):
+    try:
+        print(f"[LAYOUT-PARSING] _append_captions_to_pruned_result called: md_images keys={list((md_images or {}).keys())[:3]}")
+        _LOGGER.info("_append_captions_to_pruned_result called: md_images=%s", len(md_images or {}))
+        caption_cfg = (context or {}).get("captioning") or {}
+        print(f"[LAYOUT-PARSING] Caption config: enabled={caption_cfg.get('enabled')}, provider={caption_cfg.get('provider')}")
+        if not (isinstance(caption_cfg, dict) and caption_cfg.get("enabled")):
+            print(f"[LAYOUT-PARSING] Captioning disabled or invalid config")
+            return
+        if caption_cfg.get("provider") != "triton":
+            return
+        # Lazy init client
+        client: Optional[_TritonCaptionClient] = caption_cfg.get("_client")
+        if client is None:
+            url = caption_cfg.get("triton_url") or "grpc://127.0.0.1:8001"
+            model = caption_cfg.get("triton_model") or "blip-caption"
+            timeout_ms = int(caption_cfg.get("timeout_ms", 5000) or 5000)
+            client = _TritonCaptionClient(url, model, timeout_ms)
+            caption_cfg["_client"] = client
+
+        parsing_list = pruned_res.get("parsing_res_list") or []
+        if not isinstance(parsing_list, list) or not parsing_list:
+            return
+
+        # Index image blocks by exact int bbox
+        by_bbox: Dict[Tuple[int, int, int, int], Dict[str, Any]] = {}
+        for blk in parsing_list:
+            if not isinstance(blk, dict):
+                continue
+            if blk.get("block_label") != "image":
+                continue
+            bb = blk.get("block_bbox")
+            if not (isinstance(bb, list) and len(bb) == 4):
+                continue
+            try:
+                key = (int(bb[0]), int(bb[1]), int(bb[2]), int(bb[3]))
+            except Exception:
+                continue
+            by_bbox[key] = blk
+
+        if not by_bbox:
+            _LOGGER.info("Captioning: no image blocks to match")
+            return
+
+        params = dict(
+            max_length=int(caption_cfg.get("max_length", 50) or 50),
+            num_beams=int(caption_cfg.get("num_beams", 3) or 3),
+            no_repeat_ngram_size=int(caption_cfg.get("no_repeat_ngram_size", 2) or 2),
+        )
+
+        # Sequential per page
+        keys = list((md_images or {}).keys())
+        try:
+            _LOGGER.info(
+                "Captioning: md_images=%s candidate_keys=%s",
+                len(keys),
+                [k for k in keys if "img_in_image_box" in str(k)][:5],
+            )
+        except Exception:
+            pass
+        for key, img_b64 in (md_images or {}).items():
+            if "img_in_image_box" not in str(key):
+                continue
+            bbox = _parse_bbox_from_img_key(str(key))
+            if not bbox:
+                continue
+            blk = by_bbox.get(bbox)
+            if blk is None:
+                continue
+            if not img_b64:
+                continue
+            # Convert image to base64 if needed
+            if not isinstance(img_b64, str):
+                try:
+                    # Try to convert various formats to base64 string
+                    if isinstance(img_b64, (bytes, bytearray)):
+                        img_b64 = base64.b64encode(img_b64).decode("ascii")
+                    else:
+                        # Handle PIL Image or numpy array
+                        import numpy as _np
+                        from PIL import Image as _PILImage
+                        import io as _io
+                        
+                        if isinstance(img_b64, _PILImage.Image):
+                            # PIL Image object - convert to base64
+                            buf = _io.BytesIO()
+                            img_b64.save(buf, format="JPEG", quality=85)
+                            img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                        elif isinstance(img_b64, _np.ndarray):
+                            # Numpy array image (BGR or RGB)
+                            arr = img_b64
+                            if arr.ndim == 3 and arr.shape[2] == 3:
+                                # assume BGR as per pipeline arrays
+                                arr = arr[:, :, ::-1]
+                            pil_img = _PILImage.fromarray(arr.astype("uint8"))
+                            buf = _io.BytesIO()
+                            pil_img.save(buf, format="JPEG", quality=85)
+                            img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                        else:
+                            print(f"[LAYOUT-PARSING] Skipping unsupported image type: {type(img_b64)}")
+                            continue
+                except Exception as conv_exc:
+                    _LOGGER.warning("Captioning: failed to convert image to b64: %s", conv_exc)
+                    print(f"[LAYOUT-PARSING] Failed to convert image: {conv_exc}")
+                    continue
+            _LOGGER.info("Requesting caption bbox=%s url=%s", bbox, caption_cfg.get("triton_url"))
+            print(f"[LAYOUT-PARSING] Requesting caption for bbox={bbox} from {caption_cfg.get('triton_url')}")
+            try:
+                cap = client.caption(
+                    img_b64,
+                    max_length=params["max_length"],
+                    num_beams=params["num_beams"],
+                    no_repeat_ngram_size=params["no_repeat_ngram_size"],
+                )
+            except Exception:
+                cap = None
+            if not cap:
+                _LOGGER.warning("Caption generation failed for bbox=%s", bbox)
+                continue
+            existing = blk.get("block_content")
+            if existing:
+                blk["block_content"] = f"{existing} {cap}".strip()
+            else:
+                blk["block_content"] = cap
+    except Exception as exc:
+        _LOGGER.warning("Append captions failed: %s", exc)
 
 
 def _safe_unlink(path: str):
@@ -334,6 +616,22 @@ class TritonPythonModel(BaseTritonPythonModel):
         self.context["return_img_urls"] = False
         self.context["max_num_input_imgs"] = _DEFAULT_MAX_NUM_INPUT_IMGS
         self.context["max_output_img_size"] = _DEFAULT_MAX_OUTPUT_IMG_SIZE
+        # Load caption config from colocated YAML (no env, no fallback)
+        try:
+            self.context["captioning"] = _load_caption_config().get("captioning", {})
+        except Exception:
+            self.context["captioning"] = {"enabled": False}
+        try:
+            cap_cfg = self.context.get("captioning") or {}
+            msg = (
+                f"Captioning cfg: enabled={bool(cap_cfg.get('enabled'))} "
+                f"provider={cap_cfg.get('provider')} url={cap_cfg.get('triton_url')} "
+                f"model={cap_cfg.get('triton_model')}"
+            )
+            _LOGGER.info(msg)
+            print(msg)
+        except Exception:
+            pass
         if self.app_config.extra:
             if "file_storage" in self.app_config.extra:
                 self.context["file_storage"] = create_storage(
@@ -688,6 +986,23 @@ class TritonPythonModel(BaseTritonPythonModel):
                     md_data = item.markdown
                     md_text = md_data["markdown_texts"]
                     result_index = len(layout_parsing_results)
+                    
+                    # Make a deep copy of markdown_images BEFORE any processing
+                    # The pipeline may have already started converting images to URLs
+                    # We need the original base64 data for captioning
+                    original_md_images = dict(md_data.get("markdown_images") or {})
+                    
+                    # Append captions using original markdown images (sequential per page)
+                    try:
+                        _append_captions_to_pruned_result(
+                            pruned_res,
+                            original_md_images,
+                            self.context,
+                        )
+                    except Exception as _exc:
+                        _LOGGER.debug("[%s] caption append skipped: %s", log_id, _exc)
+                    
+                    # Process images (this modifies md_data["markdown_images"] in place, converting to URLs)
                     try:
                         md_imgs = _postprocess_images_with_timeout(
                             _POSTPROCESS_UPLOAD_TIMEOUT,

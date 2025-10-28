@@ -9,7 +9,7 @@ services:
     volumes:
       - .:/app                 # mount current dir to /app
       - ./config_gpu.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
-#      - ./paddlex/official_models:/root/.paddlex/official_models
+      - ./paddlex/official_models:/root/.paddlex/official_models
     ports:
       - "8000:8000"            # Triton HTTP endpoint
       - "8001:8001"           # Triton gRPC endpoint
@@ -24,6 +24,25 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - xyne
+
+  blip-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blip-server
+    volumes:
+      - .:/app
+    working_dir: /app/server
+    command: >
+      bash -lc 'cp model_repo/blip-caption/config_gpu.pbtxt model_repo/blip-caption/config.pbtxt && tritonserver --model-repository=model_repo --model-control-mode=explicit --load-model=blip-caption --grpc-port=8004 --http-port=8003 --log-info=1 --log-warning=1 --log-error=1'
+    ports:
+      - "8003:8003"  # BLIP HTTP
+      - "8004:8004"  # BLIP gRPC
+    shm_size: 1g
+    init: true
+    gpus: all
     networks:
       - xyne
 

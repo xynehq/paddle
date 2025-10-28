@@ -1,0 +1,9 @@
+captioning:
+  enabled: true
+  provider: triton
+  triton_url: grpc://blip-server:8004
+  triton_model: blip-caption
+  timeout_ms: 5000
+  max_length: 50
+  num_beams: 3
+  no_repeat_ngram_size: 2

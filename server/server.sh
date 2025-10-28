@@ -26,9 +26,9 @@ if [ -d shared_mods ]; then
 fi
 
 # Resolve model_dir entries dynamically based on available local models
-# python3 "$(dirname "$0")/resolve_model_dirs.py" \
-#     --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
-#     --base-dir "/root/.paddlex/official_models"
+python3 "$(dirname "$0")/resolve_model_dirs.py" \
+    --config "${PADDLEX_HPS_PIPELINE_CONFIG_PATH}" \
+    --base-dir "/root/.paddlex/official_models"
 
 # Start the standalone instance status server in the background
 python3 "$(dirname "$0")/status_server.py" &
@@ -37,4 +37,4 @@ STATUS_SERVER_PID=$!
 # Trap to ensure status server is killed when tritonserver exits
 trap "kill $STATUS_SERVER_PID 2>/dev/null" EXIT
 
-exec tritonserver --model-repository="${MODEL_REPO_DIR}" --backend-config=python,shm-default-byte-size=104857600,shm-growth-byte-size=10485760 --log-info=1 --log-warning=1 --log-error=1
+exec tritonserver --model-repository="${MODEL_REPO_DIR}" --model-control-mode=explicit --load-model=layout-parsing --backend-config=python,shm-default-byte-size=104857600,shm-growth-byte-size=10485760 --log-info=1 --log-warning=1 --log-error=1
