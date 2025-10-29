@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any, List
 
 import numpy as np
@@ -10,6 +11,8 @@ import triton_python_backend_utils as pb_utils
 DEFAULT_BLIP_MODEL_NAME = "Salesforce/blip-image-captioning-large"
 # Set to None for auto (cuda if available else cpu)
 DEFAULT_BLIP_DEVICE = None
+# Local cache directory for model weights
+BLIP_MODEL_CACHE_DIR = os.path.join(os.path.dirname(__file__), "blip_model_cache")
 
 
 class TritonPythonModel:
@@ -26,6 +29,48 @@ class TritonPythonModel:
             Each element is a JSON string: {"caption": str|null, "error": str|null, "params": {...}}
     """
 
+    def _is_model_cached(self, cache_path: Path) -> bool:
+        """Check if model is already downloaded in cache directory."""
+        if not cache_path.exists():
+            return False
+        
+        # Check for essential model files
+        # Model weights can be either pytorch_model.bin or model.safetensors
+        has_config = (cache_path / "config.json").exists()
+        has_preprocessor = (cache_path / "preprocessor_config.json").exists()
+        has_model_weights = (cache_path / "pytorch_model.bin").exists() or (cache_path / "model.safetensors").exists()
+        
+        return has_config and has_preprocessor and has_model_weights
+    
+    def _download_and_cache_model(self, model_name: str, cache_path: Path, torch, BlipForConditionalGeneration, BlipProcessor):
+        """Download model and save to cache directory."""
+        print(f"[BLIP-CAPTION] Model not found in cache. Downloading to {cache_path}...")
+        print(f"[BLIP-CAPTION] This may take several minutes...")
+        
+        # Create cache directory
+        cache_path.mkdir(parents=True, exist_ok=True)
+        
+        # Download and save processor
+        print(f"[BLIP-CAPTION] Downloading processor...")
+        processor = BlipProcessor.from_pretrained(model_name)
+        processor.save_pretrained(cache_path)
+        
+        # Download and save model
+        print(f"[BLIP-CAPTION] Downloading model weights...")
+        model = BlipForConditionalGeneration.from_pretrained(model_name)
+        model.save_pretrained(cache_path)
+        
+        # Save metadata
+        metadata = {
+            "model_name": model_name,
+            "download_complete": True,
+            "cache_dir": str(cache_path)
+        }
+        with open(cache_path / "download_metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
+        
+        print(f"[BLIP-CAPTION] Model successfully downloaded and cached")
+    
     def initialize(self, args: Any):
         # Lazy import heavy deps only here
         try:
@@ -45,13 +90,36 @@ class TritonPythonModel:
         # Use constants instead of environment variables
         model_name = DEFAULT_BLIP_MODEL_NAME
         device = DEFAULT_BLIP_DEVICE or ("cuda" if torch.cuda.is_available() else "cpu")
-
+        
+        # Setup cache directory
+        cache_path = Path(BLIP_MODEL_CACHE_DIR)
+        
+        # Check if model is cached, if not download it
+        if not self._is_model_cached(cache_path):
+            print(f"[BLIP-CAPTION] Model not found in cache, downloading...")
+            self._download_and_cache_model(
+                model_name, 
+                cache_path, 
+                torch, 
+                BlipForConditionalGeneration, 
+                BlipProcessor
+            )
+        
+        model_path = str(cache_path)
+        print(f"[BLIP-CAPTION] Loading model from cache: {model_path}")
         self._device = device
-        self._processor = BlipProcessor.from_pretrained(model_name)
+        
+        # Load processor and model from cache
+        print(f"[BLIP-CAPTION] Loading processor from {model_path}...")
+        self._processor = self._BlipProcessor.from_pretrained(model_path)
+        
+        print(f"[BLIP-CAPTION] Loading model from {model_path} on device {device}...")
         self._model = (
-            BlipForConditionalGeneration.from_pretrained(model_name).to(device)
+            self._BlipForConditionalGeneration.from_pretrained(model_path).to(device)
         )
         self._model.eval()
+        
+        print(f"[BLIP-CAPTION] Model initialized successfully on {device}")
 
     def _decode_image(self, image_b64: str):
         import base64
@@ -78,6 +146,23 @@ class TritonPythonModel:
             )
         return self._processor.decode(out[0], skip_special_tokens=True)
 
+    def _as_bytes(self, elem) -> bytes:
+        """Convert element to bytes, handling numpy.bytes_, bytes, or objects with .tobytes()."""
+        if hasattr(elem, "tobytes"):
+            return elem.tobytes()
+        elif isinstance(elem, (bytes, bytearray)):
+            return bytes(elem)
+        else:
+            return bytes(elem)
+    
+    def _error_payload(self, error_msg: str, params: dict = None) -> bytes:
+        """Build a JSON error response payload."""
+        return json.dumps({
+            "caption": None,
+            "error": error_msg,
+            "params": params or {}
+        }).encode("utf-8")
+
     def execute(self, requests):
         print(f"[BLIP-CAPTION] Received {len(requests)} request(s)")
         responses = []
@@ -90,15 +175,7 @@ class TritonPythonModel:
                             pb_utils.Tensor(
                                 "output",
                                 np.array(
-                                    [
-                                        json.dumps(
-                                            {
-                                                "caption": None,
-                                                "error": "missing input tensor",
-                                                "params": {},
-                                            }
-                                        ).encode("utf-8")
-                                    ],
+                                    [self._error_payload("missing input tensor")],
                                     dtype=object,
                                 ).reshape(1, 1),
                             )
@@ -111,27 +188,17 @@ class TritonPythonModel:
             outs: List[bytes] = []
             for elem in batch:
                 try:
-                    # elem can be numpy.bytes_, bytes, or an object scalar with .tobytes()
-                    if hasattr(elem, "tobytes"):
-                        raw = elem.tobytes()
-                    elif isinstance(elem, (bytes, bytearray)):
-                        raw = bytes(elem)
-                    else:
-                        raw = bytes(elem)
+                    raw = self._as_bytes(elem)
                     payload = json.loads(raw.decode("utf-8"))
                 except Exception as exc:
-                    outs.append(
-                        json.dumps({"caption": None, "error": f"invalid json: {exc}", "params": {}}).encode("utf-8")
-                    )
+                    outs.append(self._error_payload(f"invalid json: {exc}"))
                     continue
                 image_b64 = payload.get("image_b64") or payload.get("image")
                 max_length = int(payload.get("max_length", 50))
                 num_beams = int(payload.get("num_beams", 3))
                 no_repeat_ngram_size = int(payload.get("no_repeat_ngram_size", 2))
                 if not image_b64 or not isinstance(image_b64, str):
-                    outs.append(
-                        json.dumps({"caption": None, "error": "missing image_b64", "params": {}}).encode("utf-8")
-                    )
+                    outs.append(self._error_payload("missing image_b64"))
                     continue
                 try:
                     print(f"[BLIP-CAPTION] Decoding image and generating caption...")
@@ -157,9 +224,7 @@ class TritonPythonModel:
                         ).encode("utf-8")
                     )
                 except Exception as exc:
-                    outs.append(
-                        json.dumps({"caption": None, "error": str(exc), "params": {}}).encode("utf-8")
-                    )
+                    outs.append(self._error_payload(str(exc)))
 
             out_np = np.array(outs, dtype=object).reshape((-1, 1))
             out_tensor = pb_utils.Tensor("output", out_np)

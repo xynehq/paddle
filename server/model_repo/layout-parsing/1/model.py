@@ -199,7 +199,8 @@ class _TritonCaptionClient:
 
 
 def _load_caption_config() -> Dict[str, Any]:
-    cfg: Dict[str, Any] = {"captioning": {"enabled": False}}
+    # Default to enabled=True unless explicitly disabled
+    cfg: Dict[str, Any] = {"captioning": {"enabled": True}}
     cfg_path = os.path.join(os.path.dirname(__file__), "caption_config.yaml")
     if not os.path.isfile(cfg_path):
         return cfg
@@ -620,7 +621,29 @@ class TritonPythonModel(BaseTritonPythonModel):
         try:
             self.context["captioning"] = _load_caption_config().get("captioning", {})
         except Exception:
-            self.context["captioning"] = {"enabled": False}
+            self.context["captioning"] = {"enabled": True}
+
+        # Global override via environment variable IMAGE_CAPTIONING_ENABLED (default: true)
+        # Accept truthy: 1,true,yes,on | falsy: 0,false,no,off
+        try:
+            raw_flag = os.environ.get("IMAGE_CAPTIONING_ENABLED")
+            if raw_flag is None:
+                raw_flag = os.environ.get("ENABLE_IMAGE_CAPTIONING")
+            if raw_flag is not None:
+                val = str(raw_flag).strip().lower()
+                truthy = {"1", "true", "yes", "on"}
+                falsy = {"0", "false", "no", "off"}
+                cap_cfg = self.context.get("captioning") or {}
+                if val in truthy:
+                    cap_cfg["enabled"] = True
+                elif val in falsy:
+                    cap_cfg["enabled"] = False
+                else:
+                    # Unrecognized value: keep existing (default True)
+                    pass
+                self.context["captioning"] = cap_cfg
+        except Exception:
+            pass
         try:
             cap_cfg = self.context.get("captioning") or {}
             msg = (

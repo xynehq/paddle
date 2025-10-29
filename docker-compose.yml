@@ -6,6 +6,7 @@ services:
     container_name: paddlex-server
     environment:
       - PADDLEX_HPS_DEVICE_TYPE=gpu
+      - IMAGE_CAPTIONING_ENABLED=${IMAGE_CAPTIONING_ENABLED:-true}  # Default: true
     volumes:
       - .:/app                 # mount current dir to /app
       - ./config_gpu.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
@@ -36,7 +37,17 @@ services:
       - .:/app
     working_dir: /app/server
     command: >
-      bash -lc 'cp model_repo/blip-caption/config_gpu.pbtxt model_repo/blip-caption/config.pbtxt && tritonserver --model-repository=model_repo --model-control-mode=explicit --load-model=blip-caption --grpc-port=8004 --http-port=8003 --log-info=1 --log-warning=1 --log-error=1'
+      bash -lc '
+      if [ "$${IMAGE_CAPTIONING_ENABLED:-true}" = "true" ]; then
+        cp model_repo/blip-caption/config_gpu.pbtxt model_repo/blip-caption/config.pbtxt && 
+        tritonserver --model-repository=model_repo --model-control-mode=explicit --load-model=blip-caption --grpc-port=8004 --http-port=8003 --log-info=1 --log-warning=1 --log-error=1
+      else
+        echo "Image captioning is disabled. Blip-server will not start." && 
+        sleep infinity
+      fi
+      '
+    environment:
+      - IMAGE_CAPTIONING_ENABLED=${IMAGE_CAPTIONING_ENABLED:-true}
     ports:
       - "8003:8003"  # BLIP HTTP
       - "8004:8004"  # BLIP gRPC
