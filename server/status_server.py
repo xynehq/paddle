@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import logging
 import os
 import signal
 import socket
@@ -11,12 +10,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import socketserver
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-_LOGGER = logging.getLogger(__name__)
 
 _STATUS_SERVER_HOST = os.environ.get("TRITON_INSTANCE_STATUS_HOST", "0.0.0.0")
 _STATUS_SERVER_PORT = int(os.environ.get("TRITON_INSTANCE_STATUS_PORT", "8081"))
@@ -54,7 +47,6 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
 
             now = time.time()
             aggregate = {"active_instances": 0, "configured_instances": 0}
-            stale_entries = False
 
             for status_file in _STATUS_DIR.glob(_STATUS_FILE_PATTERN):
                 try:
@@ -63,13 +55,13 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                         continue
                     with status_file.open("r", encoding="utf-8") as handle:
                         data = json.load(handle)
+
                     configured = int(data.get("configured_instances", 0))
                     aggregate["configured_instances"] = max(
                         aggregate["configured_instances"], configured
                     )
 
                     is_stale = False
-                    age = None
                     if _STATUS_FILE_TTL_SECONDS > 0:
                         last_updated_raw = data.get("last_updated")
                         try:
@@ -85,19 +77,13 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                                 is_stale = True
 
                     if is_stale:
-                        stale_entries = True
-                        _LOGGER.debug(
-                            "Skipping stale status file %s (age %.1fs)",
-                            status_file,
-                            age if age is not None else float("nan"),
-                        )
                         continue
 
                     aggregate["active_instances"] += int(
                         data.get("active_instances", 0)
                     )
                 except Exception as exc:
-                    _LOGGER.debug("Failed to read %s: %s", status_file, exc)
+                    continue
 
             aggregate["idle_instances"] = max(
                 aggregate["configured_instances"] - aggregate["active_instances"], 0
@@ -113,7 +99,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
         except BrokenPipeError:
             pass
         except Exception as exc:
-            _LOGGER.error("Error in status handler: %s", exc)
+            print(f"[STATUS-SERVER] Error in status handler: {exc}")
             try:
                 self._send_json(500, {"error": str(exc)})
             except Exception:
@@ -125,7 +111,7 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
 
 def _install_signal_handlers(server: HTTPServer) -> None:
     def _shutdown(signum, frame):
-        _LOGGER.info("Shutting down status server...")
+        print("[STATUS-SERVER] Shutting down status server...")
         server.shutdown()
         sys.exit(0)
 
@@ -140,16 +126,14 @@ def run_server():
             _InstanceStatusRequestHandler,
         )
         httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        _LOGGER.info(
-            "Instance status server started on %s:%s%s",
-            _STATUS_SERVER_HOST,
-            _STATUS_SERVER_PORT,
-            _STATUS_ENDPOINT_PATH,
+        print(
+            "[STATUS-SERVER] Instance status server listening on "
+            f"{_STATUS_SERVER_HOST}:{_STATUS_SERVER_PORT}{_STATUS_ENDPOINT_PATH}"
         )
         _install_signal_handlers(httpd)
         httpd.serve_forever()
     except Exception as exc:
-        _LOGGER.error("Status server error: %s", exc)
+        print(f"[STATUS-SERVER] Fatal error: {exc}")
         sys.exit(1)
 
 

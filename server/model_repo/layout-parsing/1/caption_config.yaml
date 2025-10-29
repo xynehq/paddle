@@ -3,7 +3,14 @@ captioning:
   provider: triton
   triton_url: grpc://blip-server:8004
   triton_model: blip-caption
-  timeout_ms: 5000
+  timeout_ms: 10000  # Increased for batch processing
+  
+  # Image filtering thresholds (skip small images)
+  min_image_width: 100
+  min_image_height: 100
+  min_image_area: 10000
+  
+  # BLIP generation parameters
   max_length: 50
   num_beams: 3
   no_repeat_ngram_size: 2

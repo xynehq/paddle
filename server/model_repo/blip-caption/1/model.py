@@ -44,32 +44,27 @@ class TritonPythonModel:
     
     def _download_and_cache_model(self, model_name: str, cache_path: Path, torch, BlipForConditionalGeneration, BlipProcessor):
         """Download model and save to cache directory."""
-        print(f"[BLIP-CAPTION] Model not found in cache. Downloading to {cache_path}...")
-        print(f"[BLIP-CAPTION] This may take several minutes...")
-        
-        # Create cache directory
+        print(
+            f"[BLIP-CAPTION] Downloading model '{model_name}' to cache at {cache_path}. "
+            "This may take several minutes..."
+        )
         cache_path.mkdir(parents=True, exist_ok=True)
-        
-        # Download and save processor
-        print(f"[BLIP-CAPTION] Downloading processor...")
+
         processor = BlipProcessor.from_pretrained(model_name)
         processor.save_pretrained(cache_path)
-        
-        # Download and save model
-        print(f"[BLIP-CAPTION] Downloading model weights...")
+
         model = BlipForConditionalGeneration.from_pretrained(model_name)
         model.save_pretrained(cache_path)
-        
-        # Save metadata
+
         metadata = {
             "model_name": model_name,
             "download_complete": True,
-            "cache_dir": str(cache_path)
+            "cache_dir": str(cache_path),
         }
         with open(cache_path / "download_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
-        
-        print(f"[BLIP-CAPTION] Model successfully downloaded and cached")
+
+        print("[BLIP-CAPTION] Model download complete.")
     
     def initialize(self, args: Any):
         # Lazy import heavy deps only here
@@ -96,7 +91,7 @@ class TritonPythonModel:
         
         # Check if model is cached, if not download it
         if not self._is_model_cached(cache_path):
-            print(f"[BLIP-CAPTION] Model not found in cache, downloading...")
+            print(f"[BLIP-CAPTION] Cache miss detected. Fetching model '{model_name}'.")
             self._download_and_cache_model(
                 model_name, 
                 cache_path, 
@@ -106,20 +101,18 @@ class TritonPythonModel:
             )
         
         model_path = str(cache_path)
-        print(f"[BLIP-CAPTION] Loading model from cache: {model_path}")
+        print(f"[BLIP-CAPTION] Loading model from cache at {model_path} on device {device}.")
         self._device = device
         
         # Load processor and model from cache
-        print(f"[BLIP-CAPTION] Loading processor from {model_path}...")
         self._processor = self._BlipProcessor.from_pretrained(model_path)
         
-        print(f"[BLIP-CAPTION] Loading model from {model_path} on device {device}...")
         self._model = (
             self._BlipForConditionalGeneration.from_pretrained(model_path).to(device)
         )
         self._model.eval()
         
-        print(f"[BLIP-CAPTION] Model initialized successfully on {device}")
+        print(f"[BLIP-CAPTION] Model initialized successfully on {device}.")
 
     def _decode_image(self, image_b64: str):
         import base64
@@ -164,7 +157,7 @@ class TritonPythonModel:
         }).encode("utf-8")
 
     def execute(self, requests):
-        print(f"[BLIP-CAPTION] Received {len(requests)} request(s)")
+        print(f"[BLIP-CAPTION] Handling {len(requests)} inference request(s).")
         responses = []
         for request in requests:
             in_tensor = pb_utils.get_input_tensor_by_name(request, "input")
@@ -201,7 +194,6 @@ class TritonPythonModel:
                     outs.append(self._error_payload("missing image_b64"))
                     continue
                 try:
-                    print(f"[BLIP-CAPTION] Decoding image and generating caption...")
                     pil_img = self._decode_image(image_b64)
                     caption = self._generate_caption(
                         pil_img,
@@ -209,7 +201,6 @@ class TritonPythonModel:
                         num_beams=num_beams,
                         no_repeat_ngram_size=no_repeat_ngram_size,
                     )
-                    print(f"[BLIP-CAPTION] Generated caption: {caption[:100]}...")
                     outs.append(
                         json.dumps(
                             {

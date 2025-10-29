@@ -1,5 +1,6 @@
 services:
   paddlex-server:
+    image: paddlex/app:latest
     build:
       context: .               # build from current dir (Dockerfile + server.sh here)
       dockerfile: Dockerfile   # optional, defaults to "Dockerfile"
@@ -29,9 +30,7 @@ services:
       - xyne
 
   blip-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: paddlex/app:latest
     container_name: blip-server
     volumes:
       - .:/app
