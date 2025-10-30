@@ -1,6 +1,6 @@
 # Ignore paddlex folder and all its contents
 paddlex/
-
+server/model_repo/blip-caption/1/blip_model_cache/
 # Python cache files
 __pycache__/
 *.py[cod]
