@@ -37,4 +37,5 @@ STATUS_SERVER_PID=$!
 # Trap to ensure status server is killed when tritonserver exits
 trap "kill $STATUS_SERVER_PID 2>/dev/null" EXIT
 
-exec tritonserver --model-repository="${MODEL_REPO_DIR}" --model-control-mode=explicit --load-model=layout-parsing --backend-config=python,shm-default-byte-size=104857600,shm-growth-byte-size=10485760 --log-info=1 --log-warning=1 --log-error=1
+# Start tritonserver in the background
+tritonserver --model-repository="${MODEL_REPO_DIR}" --model-control-mode=explicit --load-model=layout-parsing --backend-config=python,shm-default-byte-size=104857600,shm-growth-byte-size=10485760 --http-port=8000 --grpc-port=8001 --metrics-port=8002 --log-info=1 --log-warning=1 --log-error=1

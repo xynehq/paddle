@@ -13,18 +13,20 @@ RUN python3 -m pip install --no-cache-dir \
     "safetensors>=0.4" \
     "sentencepiece>=0.1.99" \
     "transformers>=4.40,<5" \
-    "tritonclient[all]>=2.41,<3"
+    "tritonclient[all]>=2.41,<3" \
+    && python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu121 \
+    torch \
+    && rm -rf /root/.cache/pip
 
-# Install PyTorch (CUDA build). Adjust cu version if needed
-RUN python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu121 \
-    torch torchvision torchaudio
+# # Install PyTorch (CUDA build). Adjust cu version if needed
+# RUN python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu121 \
+#     torch
 
-# Set working directory inside the container
+
+
 WORKDIR /app
 
-# Copy your application files into the container
-# (adjust the COPY path if server.sh and code are not in current dir)
-COPY . /app
+COPY server/ /app/server
 
 WORKDIR /app/server
 

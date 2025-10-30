@@ -6,6 +6,12 @@ from typing import Any, List
 import numpy as np
 import triton_python_backend_utils as pb_utils
 
+from status_tracker import (
+    InstanceStatusTracker,
+    infer_configured_instance_count,
+    infer_instance_count_from_config_files,
+)
+
 
 # Defaults for BLIP config (no env required)
 DEFAULT_BLIP_MODEL_NAME = "Salesforce/blip-image-captioning-large"
@@ -13,6 +19,30 @@ DEFAULT_BLIP_MODEL_NAME = "Salesforce/blip-image-captioning-large"
 DEFAULT_BLIP_DEVICE = None
 # Local cache directory for model weights
 BLIP_MODEL_CACHE_DIR = os.path.join(os.path.dirname(__file__), "blip_model_cache")
+
+_STATUS_WRITE_INTERVAL = 0.5
+_INSTANCE_ID = os.environ.get("TRITON_SERVER_INSTANCE_ID", str(os.getpid()))
+_STATUS_FILE = f"/tmp/blip_instance_status_{_INSTANCE_ID}.json"
+_STATUS_TRACKER = InstanceStatusTracker(
+    _STATUS_FILE,
+    _INSTANCE_ID,
+    _STATUS_WRITE_INTERVAL,
+)
+_STATUS_TRACKER.write_status(force=True)
+_initial_instance_env = os.environ.get("TRITON_INSTANCE_COUNT")
+if _initial_instance_env:
+    try:
+        _STATUS_TRACKER.update_total_instances(int(_initial_instance_env), force=True)
+    except ValueError:
+        pass
+
+_initial_config_total = infer_instance_count_from_config_files(
+    {"model_directory": os.path.dirname(__file__)}
+)
+if _initial_config_total > 0:
+    _STATUS_TRACKER.update_total_instances(_initial_config_total, force=True)
+
+_STATUS_TRACKER.start()
 
 
 class TritonPythonModel:
@@ -114,6 +144,43 @@ class TritonPythonModel:
         
         print(f"[BLIP-CAPTION] Model initialized successfully on {device}.")
 
+        configured_instances = infer_configured_instance_count(
+            getattr(self, "model_config", None)
+        )
+        if not configured_instances and isinstance(args, dict):
+            model_config_json = args.get("model_config")
+            if model_config_json:
+                try:
+                    maybe_configured = infer_configured_instance_count(
+                        json.loads(model_config_json)
+                    )
+                    configured_instances = max(configured_instances, maybe_configured)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+
+        env_override = os.environ.get("TRITON_INSTANCE_COUNT")
+        if env_override:
+            try:
+                configured_instances = max(configured_instances, int(env_override))
+            except ValueError:
+                pass
+
+        force_total_update = False
+        file_override = infer_instance_count_from_config_files(args)
+        if file_override > 0:
+            configured_instances = file_override
+            force_total_update = True
+
+        try:
+            configured_instances = max(1, int(configured_instances or 0))
+        except (TypeError, ValueError):
+            configured_instances = 1
+
+        _STATUS_TRACKER.update_total_instances(
+            configured_instances, force=force_total_update
+        )
+        _STATUS_TRACKER.write_status(force=True)
+
     def _decode_image(self, image_b64: str):
         import base64
         import io
@@ -157,7 +224,7 @@ class TritonPythonModel:
         }).encode("utf-8")
 
     def execute(self, requests):
-        print(f"[BLIP-CAPTION] Handling {len(requests)} inference request(s).")
+        # print(f"[BLIP-CAPTION] Handling {len(requests)} inference request(s).")
         responses = []
         for request in requests:
             in_tensor = pb_utils.get_input_tensor_by_name(request, "input")
@@ -220,6 +287,8 @@ class TritonPythonModel:
             out_np = np.array(outs, dtype=object).reshape((-1, 1))
             out_tensor = pb_utils.Tensor("output", out_np)
             responses.append(pb_utils.InferenceResponse(output_tensors=[out_tensor]))
+
+        _STATUS_TRACKER.write_status()
         return responses
 
     def finalize(self):
