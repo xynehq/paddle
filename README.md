@@ -1,4 +1,4 @@
-# XYNE PaddleX High-Stability Serving
+# XYNE  Paddlex based OCR Module with High-Stability Serving
 
 Production deployment of PP-StructureV3 on Triton Inference Server, extended for XYNE/Juspay workloads. This project starts from the PaddleX High-Stability Serving (HPS) SDK for PP-StructureV3[^pp-structure-sdk][^paddlex-docs] and layers operational tooling, performance tuning, and optional multimodal captioning that we run in production at [xynehq/xyne](https://github.com/xynehq/xyne/) and across other Juspay services.
 
