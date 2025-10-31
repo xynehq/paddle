@@ -1,0 +1,5 @@
+{
+  "model_name": "Salesforce/blip-image-captioning-large",
+  "download_complete": true,
+  "cache_dir": "/home/aayush_shah/paddle/server/model_repo/blip-caption/1/blip_model_cache"
+}

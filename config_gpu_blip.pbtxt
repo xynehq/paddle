@@ -1,0 +1,31 @@
+backend: "python"
+max_batch_size: 16
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+output [
+  {
+    name: "output"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+
+instance_group [
+  {
+    count: 4
+    kind: KIND_GPU
+    gpus: [ 0 ]
+  }
+]
+
+dynamic_batching {
+  preferred_batch_size: [ 8, 16 ]  
+  max_queue_delay_microseconds: 5000  # Increased from 2000 to allow better batching
+  preserve_ordering: false  # Allow reordering for better throughput
+}

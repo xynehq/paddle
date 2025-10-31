@@ -1,0 +1,70 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker files
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile
+.dockerignore
+
+# Environment files
+.env
+.env.example
+
+# Logs and outputs
+*.log
+*.txt
+LOGS.TXT
+docker_logs.txt
+test_output.txt
+version.txt
+server/error.txt
+
+# Model files (mount at runtime instead of baking into image)
+paddlex/
+server/model_repo/blip-caption/1/blip_model_cache/
+
+# Client files (not needed in server image)
+client/
+configFiles/
+
+# Development and documentation files
+misc/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation (not needed in production)
+README*.md
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Config files that are mounted at runtime
+config_gpu_blip.pbtxt
+config_gpu_paddlex.pbtxt
+
+# Downloaded files directory (if exists)
+../Downloads/

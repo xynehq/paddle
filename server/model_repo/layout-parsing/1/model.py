@@ -1,24 +1,21 @@
-import atexit
-import errno
 import gc
 import io
 import json
-import logging
-import multiprocessing
 import os
 import queue
-import re
-import socket
 import threading
-import time
-from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, Final, List, Optional, Tuple
 
 import numpy as np
 import paddle
-import socketserver
 from PIL import Image, ImageSequence
+
+from layout_captioning import CaptionCoordinator, load_caption_config
+from layout_status import (
+    InstanceStatusTracker,
+    infer_configured_instance_count,
+    infer_instance_count_from_config_files,
+)
 
 from paddlex_hps_server import (
     BaseTritonPythonModel,
@@ -49,93 +46,31 @@ try:
 except Exception:
     pass
 
-_STATUS_SERVER_HOST: Final[str] = os.environ.get(
-    "TRITON_INSTANCE_STATUS_HOST", "0.0.0.0"
-)
-_STATUS_SERVER_PORT: Final[int] = int(
-    os.environ.get("TRITON_INSTANCE_STATUS_PORT", "8081")
-)
-_STATUS_ENDPOINT_PATH: Final[str] = os.environ.get(
-    "TRITON_INSTANCE_STATUS_PATH", "/instance_status"
-)
-
-_LOGGER = logging.getLogger(__name__)
-
-# Use threading instead of multiprocessing for better compatibility
-_activity_lock = threading.Lock()
-_active_request_counter = 0
-_total_instance_counter = 0
-
-# Use per-instance status files to avoid race conditions
 _INSTANCE_ID = os.environ.get("TRITON_SERVER_INSTANCE_ID", str(os.getpid()))
 _STATUS_FILE = f"/tmp/triton_instance_status_{_INSTANCE_ID}.json"
-_last_status_write = 0.0
-_status_heartbeat_stop = threading.Event()
-_status_heartbeat_thread: Optional[threading.Thread] = None
+
+_STATUS_TRACKER = InstanceStatusTracker(
+    _STATUS_FILE,
+    _INSTANCE_ID,
+    _STATUS_WRITE_INTERVAL,
+)
+
 _trim_cache_counter = 0
 
 
-def _safe_unlink(path: str):
-    try:
-        os.unlink(path)
-    except FileNotFoundError:
-        pass
-    except OSError as exc:
-        if exc.errno != errno.ENOENT:
-            _LOGGER.debug(f"unlink failed: {exc}")
+# ---------------- Helper Functions -----------------
 
-
-def _write_status_to_file(force: bool = False):
-    """Write current status to file for the standalone server to read."""
-    global _last_status_write
-    try:
-        now = time.time()
-        if not force and (now - _last_status_write) < _STATUS_WRITE_INTERVAL:
-            return
-
-        with _activity_lock:
-            active = _active_request_counter
-            total = _total_instance_counter
-
-        status_data = {
-            "active_instances": max(0, active),
-            "configured_instances": max(0, total),
-            "idle_instances": max(0, total - active),
-            "last_updated": int(now),
-            "instance_id": _INSTANCE_ID,
-        }
-        tmp_path = _STATUS_FILE + ".tmp"
-        with open(tmp_path, "w") as file_obj:
-            json.dump(status_data, file_obj, separators=(",", ":"))
-        os.replace(tmp_path, _STATUS_FILE)
-        _last_status_write = now
-    except Exception as exc:
-        _LOGGER.debug(f"Failed to write status file: {exc}")
-
-
-def _status_heartbeat_loop():
-    while not _status_heartbeat_stop.wait(_STATUS_WRITE_INTERVAL):
-        _write_status_to_file()
-
-
-def _start_status_heartbeat():
-    global _status_heartbeat_thread
-    if _status_heartbeat_thread is None:
-        _status_heartbeat_thread = threading.Thread(
-            target=_status_heartbeat_loop,
-            name="status-heartbeat",
-            daemon=True,
-        )
-        _status_heartbeat_thread.start()
-
-
-@atexit.register
-def _cleanup_status_file():
-    _status_heartbeat_stop.set()
-    if _status_heartbeat_thread and _status_heartbeat_thread.is_alive():
-        _status_heartbeat_thread.join(timeout=1.0)
-    _safe_unlink(_STATUS_FILE)
-    _safe_unlink(_STATUS_FILE + ".tmp")
+def _read_bool_env(name: str) -> Optional[bool]:
+    """Return boolean value for an environment flag if it is well-formed."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    val = str(raw).strip().lower()
+    if val in {"1", "true", "yes", "on"}:
+        return True
+    if val in {"0", "false", "no", "off"}:
+        return False
+    return None
 
 
 def _maybe_trim_gpu_cache():
@@ -177,155 +112,35 @@ def _postprocess_images_with_timeout(timeout: float, *args, **kwargs):
     try:
         status, payload = result_queue.get(timeout=timeout)
     except queue.Empty as exc:
-        _LOGGER.error("Timed out waiting for postprocess_images after %.1fs", timeout)
+        print(f"[LAYOUT-PARSING] postprocess_images timed out after {timeout:.1f}s")
         raise TimeoutError("postprocess_images timed out") from exc
     if status == "error":
         raise payload
     return payload
 
 
-@contextmanager
-def _track_active_requests():
-    global _active_request_counter
-    with _activity_lock:
-        _active_request_counter += 1
-    _write_status_to_file()
-    try:
-        yield
-    finally:
-        with _activity_lock:
-            _active_request_counter = max(_active_request_counter - 1, 0)
-        _write_status_to_file()
-
-
-def _infer_configured_instance_count(model_config: Any) -> int:
-    if model_config is None:
-        return 0
-
-    def _extract_groups(config_obj: Any) -> List[Any]:
-        if config_obj is None:
-            return []
-        if isinstance(config_obj, dict):
-            if "instance_group" in config_obj:
-                return config_obj["instance_group"] or []
-            if "config" in config_obj:
-                return _extract_groups(config_obj["config"])
-            return []
-        groups = getattr(config_obj, "instance_group", None)
-        if groups is not None:
-            return list(groups)
-        nested = getattr(config_obj, "config", None)
-        if nested is not None:
-            return _extract_groups(nested)
-        return []
-
-    groups = _extract_groups(model_config)
-    total = 0
-    for group in groups:
-        if isinstance(group, dict):
-            candidate = group.get("count", 0)
-        else:
-            candidate = getattr(group, "count", 0)
-        try:
-            total += int(candidate)
-        except (TypeError, ValueError):
-            continue
-    return max(total, 0)
-
-
-def _candidate_config_paths(args: Any) -> List[str]:
-    candidates: List[str] = []
-
-    def _add(path: Optional[str]):
-        if path and path not in candidates:
-            candidates.append(path)
-
-    directories: List[str] = []
-
-    def _add_directory(path: Optional[str]):
-        if path and path not in directories:
-            directories.append(path)
-
-    if isinstance(args, dict):
-        model_dir = args.get("model_directory")
-        if model_dir:
-            _add_directory(model_dir)
-        repo_dir = args.get("model_repository")
-        if repo_dir:
-            _add_directory(repo_dir)
-            model_version = args.get("model_version")
-            if model_version:
-                _add_directory(os.path.join(repo_dir, model_version))
-
-    module_dir = os.path.dirname(__file__)
-    _add_directory(module_dir)
-    _add_directory(os.path.dirname(module_dir))
-
-    for directory in directories:
-        _add(os.path.join(directory, "config_gpu.pbtxt"))
-        _add(os.path.join(directory, "config.pbtxt"))
-        _add(os.path.join(directory, "config_cpu.pbtxt"))
-
-    env_config_path = os.environ.get("TRITON_MODEL_CONFIG_PATH")
-    _add(env_config_path)
-    return candidates
-
-
-def _infer_instance_count_from_config_files(args: Any) -> int:
-    for path in _candidate_config_paths(args):
-        try:
-            with open(path, "r", encoding="utf-8") as config_file:
-                contents = config_file.read()
-        except FileNotFoundError:
-            continue
-        except OSError as exc:
-            _LOGGER.debug("Failed to read config file %s: %s", path, exc)
-            continue
-        matches = re.findall(r"\bcount\s*:\s*(\d+)", contents)
-        candidate_total = sum(int(match) for match in matches)
-        if candidate_total > 0:
-            return candidate_total
-    return 0
-
-
-def _update_total_instance_counter(candidate_total: int, *, force: bool = False):
-    global _total_instance_counter
-    if candidate_total <= 0:
-        return
-    with _activity_lock:
-        if force or _total_instance_counter <= 0:
-            _total_instance_counter = candidate_total
-            return
-        # Keep the highest observed value to handle multiple worker initializations
-        # racing to report their configured instance counts.
-        _total_instance_counter = max(_total_instance_counter, candidate_total)
-
-
-# Initialize status file with default values
-_write_status_to_file(force=True)
+# Initialize status tracker with default values
+_STATUS_TRACKER.write_status(force=True)
 
 _initial_instance_env = os.environ.get("TRITON_INSTANCE_COUNT")
 if _initial_instance_env:
     try:
-        _update_total_instance_counter(int(_initial_instance_env))
-        _write_status_to_file(force=True)
+        _STATUS_TRACKER.update_total_instances(
+            int(_initial_instance_env), force=True
+        )
     except ValueError:
-        _LOGGER.warning(
-            "Ignored invalid TRITON_INSTANCE_COUNT value: %s",
-            _initial_instance_env,
+        print(
+            f"[LAYOUT-PARSING] Ignored invalid TRITON_INSTANCE_COUNT value: {_initial_instance_env}"
         )
 
-_initial_config_total = _infer_instance_count_from_config_files(
+_initial_config_total = infer_instance_count_from_config_files(
     {"model_directory": os.path.dirname(__file__)}
 )
 if _initial_config_total > 0:
-    _update_total_instance_counter(_initial_config_total, force=True)
-    _write_status_to_file(force=True)
+    _STATUS_TRACKER.update_total_instances(_initial_config_total, force=True)
 
-_start_status_heartbeat()
-_LOGGER.info("Started model instance %s (PID=%s)", _INSTANCE_ID, os.getpid())
-
-
+_STATUS_TRACKER.start()
+print(f"[LAYOUT-PARSING] Started model instance {_INSTANCE_ID} (PID={os.getpid()})")
 class TritonPythonModel(BaseTritonPythonModel):
     def initialize(self, args):
         super().initialize(args)
@@ -334,6 +149,34 @@ class TritonPythonModel(BaseTritonPythonModel):
         self.context["return_img_urls"] = False
         self.context["max_num_input_imgs"] = _DEFAULT_MAX_NUM_INPUT_IMGS
         self.context["max_output_img_size"] = _DEFAULT_MAX_OUTPUT_IMG_SIZE
+        # Load caption config from colocated YAML (no env, no fallback)
+        try:
+            cfg = load_caption_config(os.path.dirname(__file__))
+            self.context["captioning"] = cfg.get("captioning", {})
+        except Exception:
+            self.context["captioning"] = {"enabled": True}
+
+        # Global override via environment variable IMAGE_CAPTIONING_ENABLED (default: true)
+        # Accept truthy: 1,true,yes,on | falsy: 0,false,no,off
+        try:
+            override = _read_bool_env("IMAGE_CAPTIONING_ENABLED")
+            if override is not None:
+                cap_cfg = dict(self.context.get("captioning") or {})
+                cap_cfg["enabled"] = override
+                self.context["captioning"] = cap_cfg
+        except Exception:
+            pass
+        try:
+            cap_cfg = self.context.get("captioning") or {}
+            print(
+                "[LAYOUT-PARSING] Captioning cfg: "
+                f"enabled={bool(cap_cfg.get('enabled'))} "
+                f"provider={cap_cfg.get('provider')} "
+                f"url={cap_cfg.get('triton_url')} "
+                f"model={cap_cfg.get('triton_model')}"
+            )
+        except Exception:
+            pass
         if self.app_config.extra:
             if "file_storage" in self.app_config.extra:
                 self.context["file_storage"] = create_storage(
@@ -360,22 +203,20 @@ class TritonPythonModel(BaseTritonPythonModel):
             if not isinstance(file_storage, SupportsGetURL):
                 raise TypeError(f"{type(file_storage)} does not support getting URLs.")
 
-        configured_instances = _infer_configured_instance_count(
+        configured_instances = infer_configured_instance_count(
             getattr(self, "model_config", None)
         )
         if not configured_instances and isinstance(args, dict):
             model_config_json = args.get("model_config")
             if model_config_json:
                 try:
-                    maybe_configured = _infer_configured_instance_count(
+                    maybe_configured = infer_configured_instance_count(
                         json.loads(model_config_json)
                     )
                     configured_instances = max(configured_instances, maybe_configured)
                 except (json.JSONDecodeError, TypeError, ValueError) as exc:
-                    _LOGGER.debug(
-                        "Failed to parse model_config for instance count: %s",
-                        exc,
-                    )
+                    # Intentionally silent: noisy debug message removed for production.
+                    pass
         env_override = os.environ.get("TRITON_INSTANCE_COUNT")
         if env_override:
             try:
@@ -383,7 +224,7 @@ class TritonPythonModel(BaseTritonPythonModel):
             except ValueError:
                 pass
         force_total_update = False
-        file_override = _infer_instance_count_from_config_files(args)
+        file_override = infer_instance_count_from_config_files(args)
         if file_override > 0:
             configured_instances = file_override
             force_total_update = True
@@ -391,10 +232,10 @@ class TritonPythonModel(BaseTritonPythonModel):
             configured_instances = max(1, int(configured_instances or 0))
         except (TypeError, ValueError):
             configured_instances = 1
-        _update_total_instance_counter(
+        _STATUS_TRACKER.update_total_instances(
             configured_instances, force=force_total_update
         )
-        _write_status_to_file(force=True)
+        _STATUS_TRACKER.write_status(force=True)
 
     def get_input_model_type(self):
         return schemas.pp_structurev3.InferRequest
@@ -445,7 +286,8 @@ class TritonPythonModel(BaseTritonPythonModel):
             try:
                 output_queue.put(("error", exc), timeout=1)
             except queue.Full:
-                _LOGGER.debug("Dropping conversion error due to full queue: %s", exc)
+                # Intentionally silent: noisy debug message removed for production.
+                pass
         finally:
             while True:
                 try:
@@ -454,53 +296,6 @@ class TritonPythonModel(BaseTritonPythonModel):
                 except queue.Full:
                     if stop_evt.wait(0.1):
                         break
-
-    def _run_page_with_fallback(
-        self,
-        img: np.ndarray,
-        pipeline_kwargs: Dict[str, Any],
-        log_id: str,
-        page_index: int,
-    ):
-        try:
-            return self.pipeline([img], **pipeline_kwargs)
-        except RuntimeError as exc:
-            if "out of memory" not in str(exc).lower():
-                raise
-            _LOGGER.warning(
-                "[%s] OOM on page %s, retrying with half-size input",
-                log_id,
-                page_index,
-            )
-            height, width = img.shape[:2]
-            if height <= 1 or width <= 1:
-                raise
-            new_size = (max(1, width // 2), max(1, height // 2))
-            try:
-                resized = Image.fromarray(img[:, :, ::-1]).resize(
-                    new_size, Image.BILINEAR
-                )
-                img_small = np.ascontiguousarray(
-                    np.asarray(resized, dtype=np.uint8)[:, :, ::-1]
-                )
-                del resized
-            except Exception as resize_exc:
-                _LOGGER.warning(
-                    "[%s] Failed to downscale page %s after OOM: %s",
-                    log_id,
-                    page_index,
-                    resize_exc,
-                )
-                raise
-            try:
-                try:
-                    gc.collect()
-                    paddle.device.cuda.empty_cache()
-                except Exception:
-                    pass
-                return self.pipeline([img_small], **pipeline_kwargs)
-            finally:
-                del img_small
 
     def _iterate_pdf_pages(
         self, file_bytes: bytes, max_num_imgs: Optional[int]
@@ -573,7 +368,7 @@ class TritonPythonModel(BaseTritonPythonModel):
                 del rgb_frame
 
     def run(self, input, log_id):
-        with _track_active_requests():
+        with _STATUS_TRACKER.track_active():
             return self._run_impl(input, log_id)
 
     def _run_impl(self, input, log_id):
@@ -644,6 +439,8 @@ class TritonPythonModel(BaseTritonPythonModel):
         layout_parsing_results: List[Dict[str, Any]] = []
         pages_meta: List[Dict[str, int]] = []
         conversion_error: Optional[Exception] = None
+        caption_cfg = self.context.get("captioning") or {}
+        caption_coordinator = CaptionCoordinator(caption_cfg)
 
         try:
             while True:
@@ -669,9 +466,7 @@ class TritonPythonModel(BaseTritonPythonModel):
                 item = None
                 pipeline_output = None
                 try:
-                    pipeline_output = self._run_page_with_fallback(
-                        img, pipeline_kwargs, log_id, page_index
-                    )
+                    pipeline_output = self.pipeline([img], **pipeline_kwargs)
                     pipeline_iter = iter(pipeline_output)
                     try:
                         item = next(pipeline_iter)
@@ -688,6 +483,20 @@ class TritonPythonModel(BaseTritonPythonModel):
                     md_data = item.markdown
                     md_text = md_data["markdown_texts"]
                     result_index = len(layout_parsing_results)
+                    
+                    # Trigger captioning before markdown images are mutated
+                    if caption_coordinator.is_enabled:
+                        original_md_images = dict(
+                            md_data.get("markdown_images") or {}
+                        )
+                        caption_coordinator.start_page(
+                            page_index,
+                            pruned_res,
+                            original_md_images,
+                            log_id,
+                        )
+                    
+                    # Process images (this modifies md_data["markdown_images"] in place, converting to URLs)
                     try:
                         md_imgs = _postprocess_images_with_timeout(
                             _POSTPROCESS_UPLOAD_TIMEOUT,
@@ -785,13 +594,11 @@ class TritonPythonModel(BaseTritonPythonModel):
             "type": file_type.lower(),
         }
 
-        _LOGGER.info(
-            "[%s] pages=%s file_type=%s visualize=%s",
-            log_id,
-            len(pages_meta),
-            file_type,
-            bool(visualize_enabled),
+        print(
+            f"[LAYOUT-PARSING] log_id={log_id} pages={len(pages_meta)} "
+            f"file_type={file_type} visualize={bool(visualize_enabled)}"
         )
+        caption_coordinator.finalize(layout_parsing_results)
 
         result_output = schemas.pp_structurev3.InferResult(
             layoutParsingResults=layout_parsing_results,

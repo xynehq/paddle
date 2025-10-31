@@ -2,23 +2,27 @@ services:
   paddlex-server:
     image: paddlex/app:latest
     build:
-      context: .               # build from current dir (Dockerfile + server.sh here)
-      dockerfile: Dockerfile   # optional, defaults to "Dockerfile"
+      context: .
+      dockerfile: Dockerfile
     container_name: paddlex-server
     environment:
       - PADDLEX_HPS_DEVICE_TYPE=gpu
-      - IMAGE_CAPTIONING_ENABLED=${IMAGE_CAPTIONING_ENABLED:-true}  # Default: true
+      - IMAGE_CAPTIONING_ENABLED=${IMAGE_CAPTIONING_ENABLED:-true}
     volumes:
-      - .:/app                 # mount current dir to /app
-      - ./config_gpu_paddlex.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
-      # - ./paddlex/official_models:/root/.paddlex/official_models
+      # Mount .env file for environment variables
+      - ./.env:/app/.env
+      # Mount paddlex models directory (excluded from image)
+      # - ./paddlex:/app/paddlex:ro
+      - ./paddlex/official_models:/root/.paddlex/official_models
+      # Only mount specific config file if needed to override
+      # - ./config_gpu_paddlex.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
     ports:
       - "8000:8000"            # Triton HTTP endpoint
-      - "8001:8001"           # Triton gRPC endpoint
+      - "8001:8001"            # Triton gRPC endpoint
       - "8002:8002"            # Triton metrics endpoint
-      - "8081:8081"            # Instance status endpoint exposed by Python backend
-    shm_size: 8g               # equivalent to --shm-size 8g
-    init: true                 # equivalent to --init
+      - "8081:8081"            # Instance status endpoint
+    shm_size: 8g
+    init: true
     deploy:
       resources:
         reservations:
@@ -35,8 +39,9 @@ services:
     profiles:
       - image-captioning
     volumes:
-      - .:/app
       - ./config_gpu_blip.pbtxt:/app/server/model_repo/blip-caption/config_gpu.pbtxt
+      # Mount BLIP model cache directory (excluded from image)
+      # - ./server/model_repo/blip-caption/1/blip_model_cache:/app/server/model_repo/blip-caption/1/blip_model_cache
     working_dir: /app/server
     command: |
       bash -lc '
