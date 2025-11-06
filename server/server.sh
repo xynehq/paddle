@@ -35,13 +35,6 @@ python3 "$(dirname "$0")/status_server.py" &
 STATUS_SERVER_PID=$!
 
 # Trap to ensure status server is killed when tritonserver exits
-trap "kill $STATUS_SERVER_PID 2>/dev/null" EXIT
-
-# Start the standalone instance status server in the background
-python3 "$(dirname "$0")/status_server.py" &
-STATUS_SERVER_PID=$!
-
-# Trap to ensure status server is killed when tritonserver exits
 trap 'kill $STATUS_SERVER_PID 2>/dev/null' EXIT
 
 # Start tritonserver in the background
