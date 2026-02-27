@@ -11,7 +11,7 @@ services:
     volumes:
       - .:/app                 # mount current dir to /app
       - ./config_gpu_paddlex.pbtxt:/app/server/model_repo/layout-parsing/config_gpu.pbtxt
-      # - ./paddlex/official_models:/root/.paddlex/official_models
+      - ./paddlex/official_models:/root/.paddlex/official_models
     ports:
       - "8000:8000"            # Triton HTTP endpoint
       - "8001:8001"           # Triton gRPC endpoint
@@ -56,6 +56,34 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - xyne
+
+  swagger-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: swagger-api
+    environment:
+      - TRITON_HTTP_URL=http://paddlex-server:8000
+      - TRITON_GRPC_URL=paddlex-server:8001
+      - STATUS_URL=http://paddlex-server:8081/instance_status
+      - PADDLEX_STATUS_URL=http://paddlex-server:8081/paddlex_instance_status
+      - IMAGE_CAPTIONING_ENABLED=${IMAGE_CAPTIONING_ENABLED:-true}
+      - SWAGGER_ENABLED=${SWAGGER_ENABLED:-true}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-50}
+      - TRITON_TIMEOUT_SECONDS=${TRITON_TIMEOUT_SECONDS:-30}
+      - PADDLEX_HPS_PIPELINE_CONFIG_PATH=${PADDLEX_HPS_PIPELINE_CONFIG_PATH:-/app/server/pipeline_config.yaml}
+    volumes:
+      - .:/app
+      - ./server/pipeline_config.yaml:/app/server/pipeline_config.yaml:ro
+      - ./config_gpu_paddlex.pbtxt:/app/config_gpu_paddlex.pbtxt:ro
+      - ./config_gpu_blip.pbtxt:/app/config_gpu_blip.pbtxt:ro
+      - ./configFiles:/app/configFiles:ro
+    ports:
+      - "8088:8088"
+    depends_on:
+      - paddlex-server
     networks:
       - xyne
 

@@ -165,6 +165,48 @@ def _read_configured_instance_count(
     return configured_instances
 
 
+def _collect_fresh_instance_metrics(
+    file_pattern: str, ttl_seconds: float, *, now=None
+) -> dict:
+    current_time = now if now is not None else time.time()
+    active_instances = 0
+    configured_instances = 0
+    has_fresh_status = False
+
+    for status_file in _STATUS_DIR.glob(file_pattern):
+        try:
+            file_stats = status_file.stat()
+            if file_stats.st_size == 0 or status_file.suffix == ".tmp":
+                continue
+            with status_file.open("r", encoding="utf-8") as handle:
+                status_payload = json.load(handle)
+
+            last_updated_raw = status_payload.get("last_updated")
+            try:
+                last_updated_ts = float(last_updated_raw)
+            except (TypeError, ValueError):
+                continue
+
+            if ttl_seconds > 0 and (current_time - last_updated_ts) > ttl_seconds:
+                continue
+
+            has_fresh_status = True
+            configured_instances = max(
+                configured_instances,
+                int(status_payload.get("configured_instances", 0)),
+            )
+            active_instances += int(status_payload.get("active_instances", 0))
+        except Exception:
+            continue
+
+    return {
+        "active_instances": max(active_instances, 0),
+        "configured_instances": max(configured_instances, 0),
+        "is_available": has_fresh_status,
+        "last_updated": int(current_time),
+    }
+
+
 class _ThreadedHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -214,11 +256,20 @@ class _InstanceStatusRequestHandler(BaseHTTPRequestHandler):
                         _MODEL_REPO_ROOT / "blip-caption" / "1",
                     ],
                 )
+                blip_live = _collect_fresh_instance_metrics(
+                    _BLIP_STATUS_FILE_PATTERN,
+                    _BLIP_STATUS_FILE_TTL_SECONDS,
+                    now=current_time,
+                )
                 self._send_json(
                     200,
                     {
                         "layout_parsing": layout_status,
-                        "blip_caption": {"configured_instances": blip_configured},
+                        "blip_caption": {
+                            "configured_instances": blip_configured,
+                            "active_instances": blip_live["active_instances"],
+                            "is_available": blip_live["is_available"],
+                        },
                     },
                 )
                 return
