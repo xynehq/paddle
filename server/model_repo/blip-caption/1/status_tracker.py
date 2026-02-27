@@ -57,11 +57,10 @@ class InstanceStatusTracker:
 
     def write_status(self, *, force: bool = False) -> None:
         try:
-            now = time.time()
-            if not force and (now - self._last_status_write) < self._write_interval:
-                return
-
             with self._status_lock:
+                now = time.time()
+                if not force and (now - self._last_status_write) < self._write_interval:
+                    return
                 total = self._configured_instances
 
             status_data = {
@@ -69,11 +68,15 @@ class InstanceStatusTracker:
                 "last_updated": int(now),
                 "instance_id": self._instance_id,
             }
-            tmp_path = self._status_file + ".tmp"
+            tmp_path = (
+                f"{self._status_file}.{threading.get_ident()}."
+                f"{int(now * 1000000)}.tmp"
+            )
             with open(tmp_path, "w") as file_obj:
                 json.dump(status_data, file_obj, separators=(",", ":"))
             os.replace(tmp_path, self._status_file)
-            self._last_status_write = now
+            with self._status_lock:
+                self._last_status_write = now
         except Exception as exc:
             print(
                 f"[BLIP-STATUS] Failed to write status file {self._status_file}: {exc}"
