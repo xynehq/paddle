@@ -18,15 +18,14 @@ RUN python3 -m pip install --no-cache-dir \
     torch \
     && rm -rf /root/.cache/pip
 
-# # Install PyTorch (CUDA build). Adjust cu version if needed
-# RUN python3 -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu121 \
-#     torch
-
-
-
 WORKDIR /app
 
+COPY api/requirements.txt /app/api/requirements.txt
+RUN python3 -m pip install --no-cache-dir -r /app/api/requirements.txt \
+    && rm -rf /root/.cache/pip
+
 COPY server/ /app/server
+COPY api/ /app/api
 
 WORKDIR /app/server
 
@@ -38,3 +37,4 @@ CMD ["/bin/bash", "server.sh"]
 EXPOSE 8000
 EXPOSE 8001
 EXPOSE 8004
+EXPOSE 8088
