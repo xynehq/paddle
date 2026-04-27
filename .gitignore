@@ -12,3 +12,5 @@ __pycache__/
 dist/
 build/
 .eggs/
+
+docling-server/.venv/*
