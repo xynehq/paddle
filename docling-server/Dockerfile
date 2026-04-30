@@ -7,9 +7,10 @@
 # DEPLOY (air-gapped machine):
 #   docker load -i docling-server.tar.gz
 #   docker run -p 8000:8000 \
-#     -e REMOTE_VLM_PRESET=lightonocr \
-#     -e GPU_INSTANCE_URL=http://<gpu-host> \
-#     -e VLM_PORT=8001 \
+#     -e VLM_PRESET=lightonocr \
+#     -e VLM_URL=https://<vlm-endpoint>/v1/chat/completions \
+#     -e VLM_MODEL=lightonai/LightOnOCR-2-1B \
+#     -e VLM_ACCESS_TOKEN=<token> \
 #     docling-server
 
 FROM python:3.11-slim-bookworm
@@ -38,11 +39,11 @@ ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
 
 # Download docling models at build time so the image is fully self-contained.
 # This adds ~500 MB to the image but means zero network calls at runtime.
-COPY download_models.py .
-RUN python3 download_models.py && rm download_models.py
+COPY download_models.py fix_hf_refs.py ./
+RUN python3 download_models.py && python3 fix_hf_refs.py && rm download_models.py fix_hf_refs.py
 
-# Lock HuggingFace into offline mode — no network calls ever at runtime.
-# The models are already in the image from the RUN step above.
+# Disable all HuggingFace network access at runtime.
+# Models are baked into the image and refs/main is fixed by fix_hf_refs.py above.
 ENV HF_HUB_OFFLINE=1
 ENV TRANSFORMERS_OFFLINE=1
 
