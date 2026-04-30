@@ -32,18 +32,15 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Fix HuggingFace cache to a known path so runtime can find what was
-# downloaded at build time.
-ENV HF_HOME=/root/.cache/huggingface
-ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
+# Where docling will find its models — both at build time and runtime.
+# Docling looks for: $DOCLING_ARTIFACTS_PATH/<org>--<repo>/
+ENV DOCLING_ARTIFACTS_PATH=/models
 
 # Download docling models at build time so the image is fully self-contained.
-# This adds ~500 MB to the image but means zero network calls at runtime.
-COPY download_models.py fix_hf_refs.py ./
-RUN python3 download_models.py && python3 fix_hf_refs.py && rm download_models.py fix_hf_refs.py
+COPY download_models.py ./
+RUN python3 download_models.py && rm download_models.py
 
-# Disable all HuggingFace network access at runtime.
-# Models are baked into the image and refs/main is fixed by fix_hf_refs.py above.
+# Disable HuggingFace network access at runtime — everything is baked in.
 ENV HF_HUB_OFFLINE=1
 ENV TRANSFORMERS_OFFLINE=1
 
