@@ -31,12 +31,13 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 GPU_INSTANCE_URL = os.getenv("GPU_INSTANCE_URL", "http://10.8.0.100")
-REMOTE_VLM_PRESET = os.getenv("REMOTE_VLM_PRESET", "").strip().lower()
-REMOTE_VLM_URL = os.getenv("REMOTE_VLM_URL", "").strip()
-REMOTE_VLM_MODEL = os.getenv("REMOTE_VLM_MODEL", "").strip()
-REMOTE_VLM_PORT = os.getenv("VLM_PORT", "8000").strip()
-REMOTE_VLM_TIMEOUT = float(os.getenv("REMOTE_VLM_TIMEOUT", "60.0"))
-REMOTE_VLM_MAX_TOKENS = int(os.getenv("REMOTE_VLM_MAX_TOKENS", "4096"))
+VLM_PRESET = os.getenv("VLM_PRESET", "").strip().lower()
+VLM_URL = os.getenv("VLM_URL", "").strip()
+VLM_MODEL = os.getenv("VLM_MODEL", "").strip()
+VLM_PORT = os.getenv("VLM_PORT", "8000").strip()
+VLM_TIMEOUT = float(os.getenv("VLM_TIMEOUT", "60.0"))
+VLM_MAX_TOKENS = int(os.getenv("VLM_MAX_TOKENS", "4096"))
+VLM_ACCESS_TOKEN = os.getenv("VLM_ACCESS_TOKEN", "").strip()
 
 IMAGE_VLM_PROMPT = os.getenv("IMAGE_VLM_PROMPT", "Read all text in this image.")
 
@@ -50,6 +51,7 @@ class VlmConfig:
     timeout: float
     max_tokens: int
     image_prompt: str
+    token: str = ""  # Bearer token for Authorization header
 
 
 @dataclass
@@ -101,13 +103,14 @@ def normalize_model_name(value: str) -> str:
     return "".join(ch for ch in value.lower() if ch.isalnum())
 
 
-def resolve_served_model(endpoint_url: str, preferred: str, timeout: float) -> str:
+def resolve_served_model(endpoint_url: str, preferred: str, timeout: float, token: str = "") -> str:
     """Return the model id actually being served, falling back to *preferred*."""
     parsed = urlparse(endpoint_url)
     models_url = urlunparse(parsed._replace(path="/v1/models", query="", fragment=""))
     preferred_norm = normalize_model_name(preferred)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        resp = requests.get(models_url, timeout=min(timeout, 10.0))
+        resp = requests.get(models_url, headers=headers, timeout=min(timeout, 10.0))
         resp.raise_for_status()
         models = resp.json().get("data", [])
     except Exception as exc:
@@ -137,38 +140,39 @@ def build_vlm_config() -> Optional[VlmConfig]:
     Returns None (with a log message) for any misconfiguration so the server
     starts cleanly without a VLM — image processing is simply skipped.
     """
-    if not REMOTE_VLM_PRESET:
-        print("VLM disabled: REMOTE_VLM_PRESET not set")
+    if not VLM_PRESET:
+        print("VLM disabled: VLM_PRESET not set")
         return None
 
-    if REMOTE_VLM_PRESET not in SUPPORTED_VLM_PRESETS:
-        print(f"VLM disabled: unsupported preset '{REMOTE_VLM_PRESET}' (supported: {sorted(SUPPORTED_VLM_PRESETS)})")
+    if VLM_PRESET not in SUPPORTED_VLM_PRESETS:
+        print(f"VLM disabled: unsupported preset '{VLM_PRESET}' (supported: {sorted(SUPPORTED_VLM_PRESETS)})")
         return None
 
     try:
-        preset = VlmConvertOptions.get_preset(REMOTE_VLM_PRESET)
+        preset = VlmConvertOptions.get_preset(VLM_PRESET)
         api_params = preset.model_spec.get_api_params(VlmEngineType.API)
     except Exception as exc:
-        print(f"VLM disabled: failed to load preset '{REMOTE_VLM_PRESET}': {exc}")
+        print(f"VLM disabled: failed to load preset '{VLM_PRESET}': {exc}")
         return None
 
-    model = REMOTE_VLM_MODEL or str(api_params.get("model") or "")
+    model = VLM_MODEL or str(api_params.get("model") or "")
     if not model:
-        print(f"VLM disabled: could not resolve model name for preset '{REMOTE_VLM_PRESET}'")
+        print(f"VLM disabled: could not resolve model name for preset '{VLM_PRESET}'")
         return None
 
-    endpoint = REMOTE_VLM_URL or f"{GPU_INSTANCE_URL}:{REMOTE_VLM_PORT}/v1/chat/completions"
-    model = resolve_served_model(endpoint, model, REMOTE_VLM_TIMEOUT)
-    max_tokens = int(api_params.get("max_tokens") or REMOTE_VLM_MAX_TOKENS)
+    endpoint = VLM_URL or f"{GPU_INSTANCE_URL}:{VLM_PORT}/v1/chat/completions"
+    model = resolve_served_model(endpoint, model, VLM_TIMEOUT, token=VLM_ACCESS_TOKEN)
+    max_tokens = int(api_params.get("max_tokens") or VLM_MAX_TOKENS)
 
-    print(f"VLM ready: preset={REMOTE_VLM_PRESET}, model={model}, url={endpoint}")
+    print(f"VLM ready: preset={VLM_PRESET}, model={model}, url={endpoint}, auth={'yes' if VLM_ACCESS_TOKEN else 'no'}")
     return VlmConfig(
-        preset=REMOTE_VLM_PRESET,
+        preset=VLM_PRESET,
         endpoint_url=endpoint,
         model=model,
-        timeout=REMOTE_VLM_TIMEOUT,
+        timeout=VLM_TIMEOUT,
         max_tokens=max_tokens,
         image_prompt=IMAGE_VLM_PROMPT,
+        token=VLM_ACCESS_TOKEN,
     )
 
 
@@ -257,6 +261,7 @@ def clean_vlm_response(content: Any, prompt: str = "") -> str:
 
 def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
     """Send *img* and *prompt* to the VLM and return the cleaned response text."""
+    headers = {"Authorization": f"Bearer {config.token}"} if config.token else {}
     payload = {
         "model": config.model,
         "max_tokens": config.max_tokens,
@@ -271,7 +276,7 @@ def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
             }
         ],
     }
-    resp = requests.post(config.endpoint_url, json=payload, timeout=config.timeout)
+    resp = requests.post(config.endpoint_url, json=payload, headers=headers, timeout=config.timeout)
     resp.raise_for_status()
     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     return clean_vlm_response(content, prompt=prompt)

@@ -7,18 +7,24 @@ services:
     ports:
       - "8001:8000"  # Using 8001 to avoid conflict with Paddle on 8000
     environment:
-      - PORT=8000
       - PYTHONUNBUFFERED=1
+      # --- VLM configuration (required for scanned PDFs and image OCR) ---
+      # Point to your GPU server hosting LightOnOCR / Granite
+      - GPU_INSTANCE_URL=${GPU_INSTANCE_URL:-http://10.8.0.100}
+      - REMOTE_VLM_PRESET=${REMOTE_VLM_PRESET:-lightonocr}
+      - VLM_PORT=${VLM_PORT:-8001}
+      - REMOTE_VLM_TIMEOUT=${REMOTE_VLM_TIMEOUT:-60.0}
     volumes:
-      # Cache models between restarts
-      - docling-models:/root/.cache/docling
+      # Persist HuggingFace model cache so first-run download is never repeated
+      - docling-hf-cache:/root/.cache/huggingface
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      # Must be longer than first-run model download time (~2-5 min)
+      start_period: 300s
 
 volumes:
-  docling-models:
+  docling-hf-cache:

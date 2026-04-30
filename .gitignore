@@ -14,3 +14,4 @@ build/
 .eggs/
 
 docling-server/.venv/*
+docling-server/jina-tokenizer/*
