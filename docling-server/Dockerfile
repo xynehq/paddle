@@ -37,10 +37,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 ENV HF_HOME=/root/.cache/huggingface
 ENV TRANSFORMERS_CACHE=/root/.cache/huggingface
 
-# Download docling models at build time so the image is fully self-contained.
-# This adds ~500 MB to the image but means zero network calls at runtime.
+# Download docling models + jina tokenizer at build time so the image is
+# fully self-contained. Adds ~500 MB but means zero network calls at runtime.
 COPY download_models.py fix_hf_refs.py ./
-RUN python3 download_models.py && python3 fix_hf_refs.py && rm download_models.py fix_hf_refs.py
+RUN python3 download_models.py && \
+    python3 -c "from huggingface_hub import snapshot_download; snapshot_download('jinaai/jina-embeddings-v2-base-en', local_dir='/app/jina-tokenizer', allow_patterns=['tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', 'vocab.txt'])" && \
+    python3 fix_hf_refs.py && \
+    rm download_models.py fix_hf_refs.py
 
 # Disable all HuggingFace network access at runtime.
 # Models are baked into the image and refs/main is fixed by fix_hf_refs.py above.
@@ -49,7 +52,6 @@ ENV TRANSFORMERS_OFFLINE=1
 
 # Copy application code
 COPY main.py .
-COPY jina-tokenizer ./jina-tokenizer
 
 RUN python3 -c "from pathlib import Path; assert Path('/app/jina-tokenizer/tokenizer.json').exists(), 'tokenizer.json missing'"
 

@@ -1,15 +1,22 @@
-"""Run at docker build time to download and cache all docling models."""
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter, PdfFormatOption
+"""Run at docker build time to download docling models into the HuggingFace
+hub cache where docling's runtime expects to find them.
 
-opts = PdfPipelineOptions()
-opts.do_ocr = False
-opts.generate_page_images = True
-opts.generate_picture_images = True
-opts.generate_table_images = False
+Revisions match docling's hardcoded constants:
+  - docling-project/docling-layout-heron  → main  (DOCLING_LAYOUT_HERON.revision)
+  - docling-project/docling-models        → v2.3.0 (TableStructureModel)
 
-DocumentConverter(
-    format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
-)
+Mismatched revisions cause LocalEntryNotFoundError at runtime even when the
+repo is cached, because snapshot_download(revision=...) checks for the exact
+tagged snapshot.
+"""
+from huggingface_hub import snapshot_download
+
+REPOS = [
+    ("docling-project/docling-layout-heron", "main"),
+    ("docling-project/docling-models", "v2.3.0"),
+]
+
+for repo, revision in REPOS:
+    print(f"Downloading {repo}@{revision} ...")
+    snapshot_download(repo_id=repo, revision=revision)
 print("Models downloaded and cached.")

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
+import urllib3
 import requests
 import torch
 import uvicorn
@@ -38,6 +39,10 @@ VLM_PORT = os.getenv("VLM_PORT", "8000").strip()
 VLM_TIMEOUT = float(os.getenv("VLM_TIMEOUT", "60.0"))
 VLM_MAX_TOKENS = int(os.getenv("VLM_MAX_TOKENS", "4096"))
 VLM_ACCESS_TOKEN = os.getenv("VLM_ACCESS_TOKEN", "").strip()
+VLM_SSL_VERIFY = os.getenv("VLM_SSL_VERIFY", "true").strip().lower() not in ("false", "0", "no")
+
+if not VLM_SSL_VERIFY:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 IMAGE_VLM_PROMPT = os.getenv("IMAGE_VLM_PROMPT", "Read all text in this image.")
 
@@ -110,7 +115,7 @@ def resolve_served_model(endpoint_url: str, preferred: str, timeout: float, toke
     preferred_norm = normalize_model_name(preferred)
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        resp = requests.get(models_url, headers=headers, timeout=min(timeout, 10.0))
+        resp = requests.get(models_url, headers=headers, timeout=min(timeout, 10.0), verify=VLM_SSL_VERIFY)
         resp.raise_for_status()
         models = resp.json().get("data", [])
     except Exception as exc:
@@ -276,7 +281,7 @@ def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
             }
         ],
     }
-    resp = requests.post(config.endpoint_url, json=payload, headers=headers, timeout=config.timeout)
+    resp = requests.post(config.endpoint_url, json=payload, headers=headers, timeout=config.timeout, verify=VLM_SSL_VERIFY)
     resp.raise_for_status()
     content = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
     return clean_vlm_response(content, prompt=prompt)
@@ -512,8 +517,8 @@ def build_chunks(
         if not text or is_placeholder(text):
             continue
         # Only inject if this page has no chunk coverage yet
-        if pg_no in pages_covered:
-            continue
+        # if pg_no in pages_covered:
+        #     continue
         pages_covered.add(pg_no)
         chunks.append(DocumentChunk(
             text=text,
