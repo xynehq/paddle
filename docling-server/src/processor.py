@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from chunking import build_chunks, extract_images
-from doc_utils import build_toc
 from utils import (
+    build_toc,
     detect_scanned_pages,
     extract_tables,
     process_images_with_vlm,
@@ -40,7 +40,6 @@ def process_document(
     toc = build_toc(doc)
     print(f"TOC: {len(toc)} entries")
 
-    # ── Enrichment ──────────────────────────────────────────────────────────
     t1             = time.time()
     scanned_pages  = detect_scanned_pages(doc)
     if scanned_pages:

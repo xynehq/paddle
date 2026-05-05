@@ -1,9 +1,6 @@
-"""Chunk building (text + VLM injections) and image extraction."""
-
 from typing import Dict, List, Optional, Set
 
-from doc_utils import chunk_pages, item_bbox, item_page
-from utils import is_placeholder
+from utils import chunk_pages, item_bbox, item_page, is_placeholder
 from models import DocumentChunk, ImageChunk, VlmConfig
 from vlm import encode_image_jpeg
 

@@ -4,7 +4,8 @@ import io
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
-
+from docling.datamodel.pipeline_options import VlmConvertOptions
+from docling.datamodel.vlm_engine_options import VlmEngineType
 import requests
 from PIL import Image
 
@@ -44,9 +45,6 @@ def build_vlm_config() -> Optional[VlmConfig]:
         return None
 
     try:
-        from docling.datamodel.pipeline_options import VlmConvertOptions
-        from docling.datamodel.vlm_engine_options import VlmEngineType
-
         preset     = VlmConvertOptions.get_preset(VLM_PRESET)
         api_params = preset.model_spec.get_api_params(VlmEngineType.API)
     except Exception as exc:
