@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,7 @@ VLM_TIMEOUT = float(os.getenv("VLM_TIMEOUT", "60.0"))
 VLM_MAX_TOKENS = int(os.getenv("VLM_MAX_TOKENS", "4096"))
 VLM_ACCESS_TOKEN = os.getenv("VLM_ACCESS_TOKEN", "").strip()
 VLM_SSL_VERIFY = os.getenv("VLM_SSL_VERIFY", "true").strip().lower() not in ("false", "0", "no")
+VLM_CONCURRENCY = max(1, int(os.getenv("VLM_CONCURRENCY", "8")))
 
 if not VLM_SSL_VERIFY:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -326,26 +328,52 @@ def process_images_with_vlm(doc, cfg: VlmConfig, table_refs: set) -> Dict[str, s
 
     *table_refs* is the set of refs already handled by extract_tables so we
     can log clearly if there is ever an unexpected overlap.
+
+    VLM calls run concurrently up to VLM_CONCURRENCY in-flight requests.
     """
     replacements: Dict[str, str] = {}
-    pictures = getattr(doc, "pictures", [])
-    print(f"VLM: processing {len(pictures)} picture(s)")
+    pictures = list(getattr(doc, "pictures", []))
+    total = len(pictures)
+    if total == 0:
+        print("VLM: processing 0 picture(s)")
+        return replacements
+
+    workers = min(VLM_CONCURRENCY, total)
+    print(f"VLM: processing {total} picture(s) with concurrency={workers}")
+
+    # Pre-render all images on the main thread (docling doc access not
+    # guaranteed thread-safe), then send the VLM requests concurrently.
+    rendered: List[Tuple[int, str, Optional[Image.Image]]] = []
     for i, pic in enumerate(pictures):
-        t = time.time()
         try:
             img = pic.get_image(doc=doc)
-            if img is None:
-                print(f"  picture {i+1}/{len(pictures)} [{pic.self_ref}]: no image, skipped")
-                continue
+        except Exception as exc:
+            print(f"  picture {i+1}/{total} [{pic.self_ref}]: render FAILED — {exc}")
+            img = None
+        rendered.append((i, pic.self_ref, img))
+
+    def ocr_one(item: Tuple[int, str, Optional[Image.Image]]) -> Tuple[str, Optional[str]]:
+        i, ref, img = item
+        if img is None:
+            print(f"  picture {i+1}/{total} [{ref}]: no image, skipped")
+            return ref, None
+        t = time.time()
+        try:
             text = call_vlm(cfg, img, cfg.image_prompt)
             elapsed = time.time() - t
             if text:
-                replacements[pic.self_ref] = text
-                print(f"  picture {i+1}/{len(pictures)} [{pic.self_ref}]: {len(text)} chars in {elapsed:.1f}s")
-            else:
-                print(f"  picture {i+1}/{len(pictures)} [{pic.self_ref}]: empty response in {elapsed:.1f}s")
+                print(f"  picture {i+1}/{total} [{ref}]: {len(text)} chars in {elapsed:.1f}s")
+                return ref, text
+            print(f"  picture {i+1}/{total} [{ref}]: empty response in {elapsed:.1f}s")
+            return ref, None
         except Exception as exc:
-            print(f"  picture {i+1}/{len(pictures)} [{pic.self_ref}]: FAILED in {time.time()-t:.1f}s — {exc}")
+            print(f"  picture {i+1}/{total} [{ref}]: FAILED in {time.time()-t:.1f}s — {exc}")
+            return ref, None
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for ref, text in ex.map(ocr_one, rendered):
+            if text:
+                replacements[ref] = text
     return replacements
 
 
@@ -381,29 +409,45 @@ def process_scanned_pages_with_vlm(doc, cfg: VlmConfig) -> Dict[int, str]:
         print("Page VLM: all pages have embedded text, no scanned pages detected")
         return {}
 
+    workers = min(VLM_CONCURRENCY, len(scanned))
     print(f"Page VLM: {len(scanned)}/{len(pages)} scanned page(s) detected "
-          f"(< {SCANNED_PAGE_CHAR_THRESHOLD} chars): {scanned}")
+          f"(< {SCANNED_PAGE_CHAR_THRESHOLD} chars) concurrency={workers}: {scanned}")
 
-    results: Dict[int, str] = {}
+    # Snapshot rendered page images on the main thread before fanning out.
+    rendered: List[Tuple[int, Optional[Image.Image]]] = []
     for pg_no in scanned:
-        t = time.time()
         try:
             page = pages[pg_no]
             img_ref = getattr(page, "image", None)
             pil = getattr(img_ref, "pil_image", None) if img_ref else None
-            if pil is None:
-                print(f"  page {pg_no}: no rendered image available, skipped")
-                continue
+        except Exception as exc:
+            print(f"  page {pg_no}: render FAILED — {exc}")
+            pil = None
+        rendered.append((pg_no, pil))
+
+    def ocr_page(item: Tuple[int, Optional[Image.Image]]) -> Tuple[int, Optional[str]]:
+        pg_no, pil = item
+        if pil is None:
+            print(f"  page {pg_no}: no rendered image available, skipped")
+            return pg_no, None
+        t = time.time()
+        try:
             text = call_vlm(cfg, pil, cfg.image_prompt)
             elapsed = time.time() - t
             if text:
-                results[pg_no] = text
                 print(f"  page {pg_no}: {len(text)} chars in {elapsed:.1f}s")
-            else:
-                print(f"  page {pg_no}: empty VLM response in {elapsed:.1f}s")
+                return pg_no, text
+            print(f"  page {pg_no}: empty VLM response in {elapsed:.1f}s")
+            return pg_no, None
         except Exception as exc:
             print(f"  page {pg_no}: FAILED in {time.time()-t:.1f}s — {exc}")
+            return pg_no, None
 
+    results: Dict[int, str] = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for pg_no, text in ex.map(ocr_page, rendered):
+            if text:
+                results[pg_no] = text
     return results
 
 
@@ -640,8 +684,16 @@ def initialize_models() -> Tuple[DocumentConverter, HybridChunker, Optional[VlmC
     else:
         device = AcceleratorDevice.CPU
 
+    docling_threads = max(1, int(os.getenv("DOCLING_NUM_THREADS", "16")))
+    layout_batch = max(1, int(os.getenv("DOCLING_LAYOUT_BATCH", "8")))
+    table_batch = max(1, int(os.getenv("DOCLING_TABLE_BATCH", "8")))
+
     pipeline_options = PdfPipelineOptions()
-    pipeline_options.accelerator_options = AcceleratorOptions(num_threads=4, device=device)
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        num_threads=docling_threads, device=device
+    )
+    pipeline_options.layout_batch_size = layout_batch
+    pipeline_options.table_batch_size = table_batch
     pipeline_options.generate_picture_images = True
     pipeline_options.generate_table_images = False  # tables use export_to_markdown(), not VLM
     # Disable local OCR entirely — no Tesseract/EasyOCR model needed.
@@ -653,6 +705,12 @@ def initialize_models() -> Tuple[DocumentConverter, HybridChunker, Optional[VlmC
     # scale=2.0 doubles the default 72 DPI → ~144 DPI, good enough for OCR.
     pipeline_options.generate_page_images = True
     pipeline_options.images_scale = 2.0
+
+    print(
+        f"Docling: device={device.value} num_threads={docling_threads} "
+        f"layout_batch={layout_batch} table_batch={table_batch} "
+        f"cuda_available={torch.cuda.is_available()}"
+    )
 
     converter = DocumentConverter(
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)}
@@ -799,6 +857,7 @@ async def process_document_endpoint(file: UploadFile = File(...), doc_id: str = 
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
+    print(f"Processing file: {file.filename} (doc_id={doc_id})", flush=True)
     suffix = Path(file.filename).suffix
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     try:
