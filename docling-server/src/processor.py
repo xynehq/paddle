@@ -2,13 +2,15 @@
 
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from chunking import build_chunks, extract_images
 from utils import (
+    analyze_page_text_quality,
+    build_page_ocr_toc,
     build_toc,
-    detect_scanned_pages,
     extract_tables,
+    normalize_toc_entries,
     process_images_with_vlm,
     process_scanned_pages_with_vlm,
 )
@@ -25,7 +27,9 @@ def process_document(
 ) -> Dict[str, Any]:
     """Convert a PDF and return structured TOC, text chunks, and images.
     
-    Uses HybridChunker for digital PDFs with structure, semchunk for scanned pages."""
+    Uses HybridChunker for digital PDFs with structure, semchunk for scanned pages.
+    Implements page text quality detection to decide between native text vs OCR.
+    """
     t0 = time.time()
 
     # ── Conversion ──────────────────────────────────────────────────────────
@@ -39,45 +43,80 @@ def process_document(
         f"{len(getattr(doc, 'pictures', []))} pictures"
     )
 
-    # ── TOC ─────────────────────────────────────────────────────────────────
-    toc = build_toc(doc)
-    print(f"TOC: {len(toc)} entries")
+    # ── Page Quality Analysis ───────────────────────────────────────────────
+    page_quality = analyze_page_text_quality(doc)
+    page_ocr_candidates: List[int] = sorted(
+        pg_no for pg_no, quality in page_quality.items()
+        if quality["ocr_candidate"]
+    )
+    
+    # ── TOC (will be built after determining which pages to suppress) ────────
+    print(f"TOC: pending (will combine native + OCR sources)")
 
-    t1             = time.time()
-    scanned_pages  = detect_scanned_pages(doc)
-    if scanned_pages:
-        print(f"Detected {len(scanned_pages)} scanned page(s): {sorted(scanned_pages)}")
+    t1 = time.time()
 
     # Tables are always extracted natively (no VLM needed)
     replacements   = extract_tables(doc)
     tables_count   = len(replacements)
 
     pictures_count = 0
-    page_vlm_text  = {}
+    page_vlm_text: Dict[int, str] = {}
+    page_ocr_failed: List[int] = []
+    picture_ocr_skipped = 0
 
     if vlm_config:
-        img_replacements = process_images_with_vlm(
-            doc, vlm_config, set(replacements), scanned_pages
+        # Step 1: OCR candidate pages (full-page)
+        page_vlm_text = process_scanned_pages_with_vlm(doc, vlm_config, page_ocr_candidates)
+        page_ocr_success: Set[int] = set(page_vlm_text.keys())
+        page_ocr_failed = [pg_no for pg_no in page_ocr_candidates if pg_no not in page_ocr_success]
+        
+        # Log failed pages
+        for pg_no in page_ocr_failed:
+            quality = page_quality.get(pg_no)
+            native_chars = quality["native_chars"] if quality else 0
+            reason = quality["decision"] if quality else "unknown"
+            print(f"  page {pg_no}: chars={native_chars} decision=ocr_failed_keep_native original_reason={reason}")
+
+        # Step 2: OCR individual pictures (skip pages that had successful page OCR)
+        img_replacements, picture_ocr_skipped = process_images_with_vlm(
+            doc,
+            vlm_config,
+            set(replacements),
+            scanned_pages=set(),  # We're using page_ocr_success now
+            skip_pages=page_ocr_success,
         )
         replacements.update(img_replacements)
         pictures_count = len(img_replacements)
-        page_vlm_text  = process_scanned_pages_with_vlm(doc, vlm_config, scanned_pages)
     else:
-        print("VLM not configured — skipping image OCR and scanned page processing")
+        page_ocr_success = set()
+        print("VLM not configured — skipping image OCR and page OCR processing")
+
+    # Determine which pages to suppress native chunks for
+    suppress_native_pages: Set[int] = set(page_vlm_text.keys())
+
+    # Build combined TOC
+    native_toc = build_toc(doc, suppress_pages=suppress_native_pages)
+    ocr_toc = build_page_ocr_toc(page_vlm_text)
+    toc = normalize_toc_entries(native_toc + ocr_toc)
+    print(f"TOC: {len(toc)} entries ({len(native_toc)} native, {len(ocr_toc)} page OCR)")
 
     print(
         f"Enrichment: {len(replacements)} replacements + "
-        f"{len(page_vlm_text)} scanned pages in {time.time() - t1:.2f}s"
+        f"{len(page_vlm_text)} page OCR result(s) in {time.time() - t1:.2f}s"
     )
 
     # ── Chunking & images ────────────────────────────────────────────────────
-    chunks = build_chunks(
+    chunks, chunk_stats = build_chunks(
         doc, replacements, hybrid_chunker,
         sem_chunker=sem_chunker,
         page_vlm_text=page_vlm_text,
-        scanned_pages=scanned_pages,
+        suppress_native_pages=suppress_native_pages,
     )
-    images = extract_images(doc, replacements, scanned_pages)
+    images, image_extract_skipped = extract_images(
+        doc, replacements, 
+        scanned_pages=set(),
+        skip_pages=suppress_native_pages
+    )
 
     # ── Response payload ─────────────────────────────────────────────────────
     return {
@@ -94,7 +133,11 @@ def process_document(
                 "model":              vlm_config.model  if vlm_config else None,
                 "tables_replaced":    tables_count,
                 "pictures_replaced":  pictures_count,
-                "scanned_pages_ocrd": len(page_vlm_text),
+                "page_ocr_candidates": page_ocr_candidates,
+                "page_ocr_success":   sorted(page_vlm_text.keys()),
+                "page_ocr_failed":    page_ocr_failed,
+                "native_chunks_suppressed": chunk_stats.get("native_chunks_suppressed", 0),
+                "picture_ocr_skipped": max(picture_ocr_skipped, image_extract_skipped),
             },
         },
         "toc": {
