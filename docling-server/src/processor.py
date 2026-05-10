@@ -63,12 +63,30 @@ def process_document(
     page_vlm_text: Dict[int, str] = {}
     page_ocr_failed: List[int] = []
     picture_ocr_skipped = 0
+    crop_image_chunks = []
+    crop_stats = dict(
+        page_image_regions_detected=0,
+        crop_ocr_attempted=0,
+        crop_ocr_success=0,
+        crop_ocr_failed=0,
+        crop_ocr_skipped=0,
+        crop_ocr_skipped_small=0,
+    )
 
     if vlm_config:
         # Step 1: OCR candidate pages (full-page)
-        page_vlm_text = process_scanned_pages_with_vlm(doc, vlm_config, page_ocr_candidates)
-        page_ocr_success: Set[int] = set(page_vlm_text.keys())
+        page_vlm_results = process_scanned_pages_with_vlm(doc, vlm_config, page_ocr_candidates)
+        page_vlm_text = {pg_no: result.text for pg_no, result in page_vlm_results.items()}
+        page_ocr_success: Set[int] = set(page_vlm_results.keys())
         page_ocr_failed = [pg_no for pg_no in page_ocr_candidates if pg_no not in page_ocr_success]
+        for result in page_vlm_results.values():
+            crop_image_chunks.extend(result.image_chunks)
+            crop_stats["page_image_regions_detected"] += result.image_regions_detected
+            crop_stats["crop_ocr_attempted"] += result.crop_ocr_attempted
+            crop_stats["crop_ocr_success"] += result.crop_ocr_success
+            crop_stats["crop_ocr_failed"] += result.crop_ocr_failed
+            crop_stats["crop_ocr_skipped"] += result.crop_ocr_skipped
+            crop_stats["crop_ocr_skipped_small"] += result.crop_ocr_skipped_small
         
         # Log failed pages
         for pg_no in page_ocr_failed:
@@ -117,6 +135,9 @@ def process_document(
         scanned_pages=set(),
         skip_pages=suppress_native_pages
     )
+    if crop_image_chunks:
+        print(f"Images: adding {len(crop_image_chunks)} LightOn crop OCR image chunk(s)")
+        images.extend(crop_image_chunks)
 
     # ── Response payload ─────────────────────────────────────────────────────
     return {
@@ -138,6 +159,7 @@ def process_document(
                 "page_ocr_failed":    page_ocr_failed,
                 "native_chunks_suppressed": chunk_stats.get("native_chunks_suppressed", 0),
                 "picture_ocr_skipped": max(picture_ocr_skipped, image_extract_skipped),
+                **crop_stats,
             },
         },
         "toc": {

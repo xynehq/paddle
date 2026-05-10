@@ -84,13 +84,13 @@ async def process_document_endpoint(
         )
 
         # Debug: save result to file with timestamp to avoid overwriting
-        # debug_dir = Path("debug_output")
-        # debug_dir.mkdir(exist_ok=True)
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # debug_path = debug_dir / f"{doc_id}_{timestamp}.json"
-        # with open(debug_path, "w") as f:
-        #     json.dump(result, f, indent=2, default=str)
-        # print(f"[DEBUG] Result saved to: {debug_path}")
+        debug_dir = Path("debug_output")
+        debug_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_path = debug_dir / f"{doc_id}_{timestamp}.json"
+        with open(debug_path, "w") as f:
+            json.dump(result, f, indent=2, default=str)
+        print(f"[DEBUG] Result saved to: {debug_path}")
 
         return JSONResponse(content=result)
 
