@@ -1,0 +1,9 @@
+docling>=2.0.0
+fastapi==0.109.1
+uvicorn[standard]>=0.24.0
+python-multipart==0.0.26
+pydantic>=2.0.0
+torch==2.6.0
+transformers>=4.41.0
+sentence-transformers>=2.2.0
+accelerate>=0.20.0

@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Output files (don't include tar in build context)
+*.tar.gz
+docling-server.tar.gz
+
+# Local development files
+.env
+.env.local
+
+# Result files
+*.json
+!tokenizer.json
+
+# Documentation (keep for context)
+# README.md
+# RUN_INSTRUCTIONS.md
+
+# Scripts
+build-and-export.sh
+build.log
