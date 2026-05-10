@@ -64,7 +64,9 @@ def build_vlm_config() -> Optional[VlmConfig]:
 
     endpoint   = VLM_URL or f"{GPU_INSTANCE_URL}:{VLM_PORT}/v1/chat/completions"
     model      = _resolve_served_model(endpoint, model, VLM_TIMEOUT, token=VLM_ACCESS_TOKEN)
-    max_tokens = int(api_params.get("max_tokens") or VLM_MAX_TOKENS)
+    # Prefer the service-level setting so deployments can raise/lower the
+    # response budget without being capped by the Docling preset default.
+    max_tokens = VLM_MAX_TOKENS
 
     print(f"VLM ready: preset={VLM_PRESET}, model={model}, url={endpoint}, "
           f"auth={'yes' if VLM_ACCESS_TOKEN else 'no'}")

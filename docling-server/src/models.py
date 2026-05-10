@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -40,3 +40,26 @@ class ImageChunk:
     bbox:          Optional[Dict[str, float]] = None
     width:         Optional[int] = None
     height:        Optional[int] = None
+
+
+@dataclass
+class VlmDetectedImage:
+    marker:     str
+    bbox:       Dict[str, float]
+    pixel_bbox: Tuple[int, int, int, int]
+    width:      int
+    height:     int
+    start:      int
+    end:        int
+
+
+@dataclass
+class VlmPageResult:
+    text:                    str
+    image_chunks:            List[ImageChunk] = field(default_factory=list)
+    image_regions_detected:  int = 0
+    crop_ocr_attempted:      int = 0
+    crop_ocr_success:        int = 0
+    crop_ocr_failed:         int = 0
+    crop_ocr_skipped:        int = 0
+    crop_ocr_skipped_small:  int = 0
