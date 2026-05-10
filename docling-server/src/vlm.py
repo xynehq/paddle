@@ -4,9 +4,11 @@ import io
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
+
+import requests
+import urllib3
 from docling.datamodel.pipeline_options import VlmConvertOptions
 from docling.datamodel.vlm_engine_options import VlmEngineType
-import requests
 from PIL import Image
 
 from config import (
@@ -19,10 +21,14 @@ from config import (
     VLM_MODEL,
     VLM_PORT,
     VLM_PRESET,
+    VLM_SSL_VERIFY,
     VLM_TIMEOUT,
     VLM_URL,
 )
 from models import VlmConfig
+
+if not VLM_SSL_VERIFY:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +92,7 @@ def _resolve_served_model(
     headers    = {"Authorization": f"Bearer {token}"} if token else {}
 
     try:
-        resp = requests.get(models_url, headers=headers, timeout=min(timeout, 10.0))
+        resp = requests.get(models_url, headers=headers, timeout=min(timeout, 10.0), verify=VLM_SSL_VERIFY)
         resp.raise_for_status()
         models = resp.json().get("data", [])
     except Exception as exc:
@@ -170,7 +176,7 @@ def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
         }],
     }
     resp = requests.post(
-        config.endpoint_url, json=payload, headers=headers, timeout=config.timeout
+        config.endpoint_url, json=payload, headers=headers, timeout=config.timeout, verify=VLM_SSL_VERIFY
     )
     resp.raise_for_status()
     raw = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")

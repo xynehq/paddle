@@ -14,6 +14,8 @@ VLM_TIMEOUT       = float(os.getenv("VLM_TIMEOUT", "60.0"))
 VLM_MAX_TOKENS    = int(os.getenv("VLM_MAX_TOKENS", "4096"))
 VLM_ACCESS_TOKEN  = os.getenv("VLM_ACCESS_TOKEN", "").strip()
 VLM_IMAGE_MAX_DIM = int(os.getenv("VLM_IMAGE_MAX_DIM", "2048"))
+VLM_CONCURRENCY = max(1, int(os.getenv("VLM_CONCURRENCY", "8")))
+VLM_SSL_VERIFY = os.getenv("VLM_SSL_VERIFY", "true").strip().lower() not in ("false", "0", "no")
 
 IMAGE_VLM_PROMPT = os.getenv("IMAGE_VLM_PROMPT", "Read all text in this image.")
 
@@ -23,5 +25,11 @@ IMAGE_VLM_PROMPT = os.getenv("IMAGE_VLM_PROMPT", "Read all text in this image.")
 # Pages with fewer extracted chars than this threshold are treated as
 # scanned / image-only and sent to the VLM as full-page images.
 SCANNED_PAGE_CHAR_THRESHOLD = int(os.getenv("SCANNED_PAGE_CHAR_THRESHOLD", "50"))
+
+# Shared chunk size for both HybridChunker (digital PDFs) and semchunk (scanned pages)
+MAX_CHUNK_TOKENS = int(os.getenv("MAX_CHUNK_TOKENS", "1024"))
+
+# Overlap between chunks for scanned pages (0.1 = 10%)
+SCANNED_PAGE_OVERLAP = float(os.getenv("SCANNED_PAGE_OVERLAP", "0.1"))
 
 SUPPORTED_VLM_PRESETS = frozenset({"granite_docling", "lightonocr"})

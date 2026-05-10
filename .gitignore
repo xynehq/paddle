@@ -15,3 +15,5 @@ build/
 
 docling-server/.venv/*
 docling-server/jina-tokenizer/*
+docling-server/e5-tokenizer/*
+docling-server/.env

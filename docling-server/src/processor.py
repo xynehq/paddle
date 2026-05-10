@@ -2,7 +2,7 @@
 
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from chunking import build_chunks, extract_images
 from utils import (
@@ -19,10 +19,13 @@ def process_document(
     file_path: str,
     doc_id: str,
     doc_converter,
-    chunker,
+    hybrid_chunker,
+    sem_chunker: Callable[[str], list[str]],
     vlm_config: Optional[VlmConfig],
 ) -> Dict[str, Any]:
-    """Convert a PDF and return structured TOC, text chunks, and images."""
+    """Convert a PDF and return structured TOC, text chunks, and images.
+    
+    Uses HybridChunker for digital PDFs with structure, semchunk for scanned pages."""
     t0 = time.time()
 
     # ── Conversion ──────────────────────────────────────────────────────────
@@ -69,7 +72,8 @@ def process_document(
 
     # ── Chunking & images ────────────────────────────────────────────────────
     chunks = build_chunks(
-        doc, replacements, chunker,
+        doc, replacements, hybrid_chunker,
+        sem_chunker=sem_chunker,
         page_vlm_text=page_vlm_text,
         scanned_pages=scanned_pages,
     )

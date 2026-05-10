@@ -1,5 +1,6 @@
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set
 
+from config import SCANNED_PAGE_OVERLAP
 from utils import chunk_pages, item_bbox, item_page, is_placeholder
 from models import DocumentChunk, ImageChunk, VlmConfig
 from vlm import encode_image_jpeg
@@ -12,15 +13,15 @@ from vlm import encode_image_jpeg
 def build_chunks(
     doc,
     replacements: Dict[str, str],
-    chunker,
+    hybrid_chunker,
+    sem_chunker: Callable[[str], list[str]],
     page_vlm_text: Optional[Dict[int, str]] = None,
     scanned_pages: Optional[Set[int]] = None,
 ) -> List[DocumentChunk]:
-    """Build DocumentChunks from the HybridChunker output.
+    """Build DocumentChunks using HybridChunker for digital PDFs, semchunk for scanned pages.
 
-    HybridChunker never yields PictureItems, so picture VLM text lives only in
-    image_chunks (returned by extract_images).  Scanned pages always have their
-    VLM text injected here as plain text chunks.
+    HybridChunker is used for native PDF text to preserve document structure.
+    semchunk is used for VLM-extracted scanned page text (no structure available).
     """
     scanned_pages    = scanned_pages or set()
     page_vlm_text    = page_vlm_text or {}
@@ -30,7 +31,7 @@ def build_chunks(
 
     stats = dict(from_text=0, from_vlm=0, skipped_placeholder=0, skipped_duplicate=0)
 
-    for chunk in chunker.chunk(doc):
+    for chunk in hybrid_chunker.chunk(doc):
         items = list(getattr(chunk.meta, "doc_items", []) or [])
         text, source = _resolve_chunk_text(chunk, items, replacements, seen_refs, stats)
 
@@ -58,8 +59,9 @@ def build_chunks(
         seen_refs.add(ref)
         pic_refs_noted += 1
 
-    # Inject full-page VLM text for scanned pages
+    # Chunk scanned page VLM text using semchunk
     pages_injected = 0
+    chunks_injected = 0
     for pg_no, text in sorted(page_vlm_text.items()):
         text = text.strip()
         if not text or is_placeholder(text):
@@ -68,9 +70,14 @@ def build_chunks(
         if pg_no not in scanned_pages and pg_no in pages_covered:
             continue
         pages_covered.add(pg_no)
-        chunks.append(DocumentChunk(text=text, headings=[], page_numbers=[pg_no], bbox=None))
-        stats["from_vlm"] += 1
-        pages_injected   += 1
+
+        # Use semchunk to split VLM text into coherent chunks
+        page_chunks = sem_chunker(text, overlap=SCANNED_PAGE_OVERLAP)
+        for chunk_text in page_chunks:
+            chunks.append(DocumentChunk(text=chunk_text, headings=[], page_numbers=[pg_no], bbox=None))
+            stats["from_vlm"] += 1
+            chunks_injected += 1
+        pages_injected += 1
 
     total_pages = len(getattr(doc, "pages", {}))
     uncovered   = sorted(set(range(1, total_pages + 1)) - pages_covered)
@@ -79,7 +86,8 @@ def build_chunks(
         f"Chunks: {len(chunks)} total  "
         f"({stats['from_text']} from text layer, {stats['from_vlm']} from VLM, "
         f"{pic_refs_noted} picture(s) in image_chunks only)\n"
-        f"  skipped: {stats['skipped_placeholder']} empty/placeholder, "
+        f"  scanned: {pages_injected} pages → {chunks_injected} chunks (semchunk), "
+        f"{stats['skipped_placeholder']} empty/placeholder, "
         f"{stats['skipped_duplicate']} duplicate table sub-chunks\n"
         f"  page coverage: {len(pages_covered)}/{total_pages}"
         + (f"  |  no-chunk pages: {uncovered}" if uncovered else "")

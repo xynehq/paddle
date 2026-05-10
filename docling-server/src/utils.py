@@ -1,8 +1,11 @@
 import re
 import time
-from typing import Dict, List, Optional, Set
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, List, Optional, Set, Tuple
 
-from config import SCANNED_PAGE_CHAR_THRESHOLD
+from PIL import Image
+
+from config import SCANNED_PAGE_CHAR_THRESHOLD, VLM_CONCURRENCY
 from docling_core.types.doc import DocItemLabel
 from models import TocEntry, VlmConfig
 from vlm import call_vlm
@@ -81,6 +84,8 @@ def process_images_with_vlm(
     """OCR every picture (excluding those on scanned pages) via the VLM.
 
     Returns a mapping of ``picture.self_ref → text``.
+
+    VLM calls run concurrently up to VLM_CONCURRENCY in-flight requests.
     """
     pictures = getattr(doc, "pictures", [])
 
@@ -89,26 +94,49 @@ def process_images_with_vlm(
 
     if skipped:
         print(f"VLM pictures: skipping {skipped} on scanned pages")
-    print(f"VLM pictures: processing {len(eligible)}")
 
-    replacements: Dict[str, str] = {}
+    total = len(eligible)
+    if total == 0:
+        print("VLM pictures: processing 0 picture(s)")
+        return {}
+
+    workers = min(VLM_CONCURRENCY, total)
+    print(f"VLM pictures: processing {total} with concurrency={workers}")
+
+    # Pre-render all images on the main thread (docling doc access not
+    # guaranteed thread-safe), then send the VLM requests concurrently.
+    rendered: List[Tuple[int, str, Optional[Image.Image]]] = []
     for i, pic in enumerate(eligible):
-        label = f"picture {i + 1}/{len(eligible)} [{pic.self_ref}]"
-        t     = time.time()
         try:
             img = pic.get_image(doc=doc)
-            if img is None:
-                print(f"  {label}: no image, skipped")
-                continue
-            text    = call_vlm(cfg, img, cfg.image_prompt)
+        except Exception as exc:
+            print(f"  picture {i+1}/{total} [{pic.self_ref}]: render FAILED — {exc}")
+            img = None
+        rendered.append((i, pic.self_ref, img))
+
+    def ocr_one(item: Tuple[int, str, Optional[Image.Image]]) -> Tuple[str, Optional[str]]:
+        i, ref, img = item
+        if img is None:
+            print(f"  picture {i+1}/{total} [{ref}]: no image, skipped")
+            return ref, None
+        t = time.time()
+        try:
+            text = call_vlm(cfg, img, cfg.image_prompt)
             elapsed = time.time() - t
             if text:
-                replacements[pic.self_ref] = text
-                print(f"  {label}: {len(text)} chars in {elapsed:.1f}s")
-            else:
-                print(f"  {label}: empty response in {elapsed:.1f}s")
+                print(f"  picture {i+1}/{total} [{ref}]: {len(text)} chars in {elapsed:.1f}s")
+                return ref, text
+            print(f"  picture {i+1}/{total} [{ref}]: empty response in {elapsed:.1f}s")
+            return ref, None
         except Exception as exc:
-            print(f"  {label}: FAILED in {time.time() - t:.1f}s — {exc}")
+            print(f"  picture {i+1}/{total} [{ref}]: FAILED in {time.time()-t:.1f}s — {exc}")
+            return ref, None
+
+    replacements: Dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for ref, text in ex.map(ocr_one, rendered):
+            if text:
+                replacements[ref] = text
 
     return replacements
 
@@ -132,31 +160,47 @@ def process_scanned_pages_with_vlm(
 
     pages  = getattr(doc, "pages", {})
     scanned = sorted(scanned_pages)
+    workers = min(VLM_CONCURRENCY, len(scanned))
     print(
         f"Page VLM: {len(scanned)}/{len(pages)} scanned page(s) "
-        f"(< {SCANNED_PAGE_CHAR_THRESHOLD} chars): {scanned}"
+        f"(< {SCANNED_PAGE_CHAR_THRESHOLD} chars) concurrency={workers}: {scanned}"
     )
 
-    results: Dict[int, str] = {}
+    # Snapshot rendered page images on the main thread before fanning out.
+    rendered: List[Tuple[int, Optional[Image.Image]]] = []
     for pg_no in scanned:
-        label = f"page {pg_no}"
-        t     = time.time()
         try:
-            page    = pages[pg_no]
+            page = pages[pg_no]
             img_ref = getattr(page, "image", None)
-            pil     = getattr(img_ref, "pil_image", None) if img_ref else None
-            if pil is None:
-                print(f"  {label}: no rendered image available, skipped")
-                continue
-            text    = call_vlm(cfg, pil, cfg.image_prompt)
+            pil = getattr(img_ref, "pil_image", None) if img_ref else None
+        except Exception as exc:
+            print(f"  page {pg_no}: render FAILED — {exc}")
+            pil = None
+        rendered.append((pg_no, pil))
+
+    def ocr_page(item: Tuple[int, Optional[Image.Image]]) -> Tuple[int, Optional[str]]:
+        pg_no, pil = item
+        if pil is None:
+            print(f"  page {pg_no}: no rendered image available, skipped")
+            return pg_no, None
+        t = time.time()
+        try:
+            text = call_vlm(cfg, pil, cfg.image_prompt)
             elapsed = time.time() - t
             if text:
-                results[pg_no] = text
-                print(f"  {label}: {len(text)} chars in {elapsed:.1f}s")
-            else:
-                print(f"  {label}: empty VLM response in {elapsed:.1f}s")
+                print(f"  page {pg_no}: {len(text)} chars in {elapsed:.1f}s")
+                return pg_no, text
+            print(f"  page {pg_no}: empty VLM response in {elapsed:.1f}s")
+            return pg_no, None
         except Exception as exc:
-            print(f"  {label}: FAILED in {time.time() - t:.1f}s — {exc}")
+            print(f"  page {pg_no}: FAILED in {time.time()-t:.1f}s — {exc}")
+            return pg_no, None
+
+    results: Dict[int, str] = {}
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for pg_no, text in ex.map(ocr_page, rendered):
+            if text:
+                results[pg_no] = text
 
     return results
 

@@ -8,11 +8,27 @@ services:
       - "8001:8000"  # Using 8001 to avoid conflict with Paddle on 8000
     environment:
       - PYTHONUNBUFFERED=1
+      - PORT=${PORT:-8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # --- VLM configuration (required for scanned PDFs and image OCR) ---
       - VLM_PRESET=${VLM_PRESET:-lightonocr}
       - VLM_URL=${VLM_URL:-}
       - VLM_MODEL=${VLM_MODEL:-lightonai/LightOnOCR-2-1B}
       - VLM_ACCESS_TOKEN=${VLM_ACCESS_TOKEN:-}
+      - VLM_TIMEOUT=${VLM_TIMEOUT:-60.0}
+      - VLM_MAX_TOKENS=${VLM_MAX_TOKENS:-4096}
+      - VLM_IMAGE_MAX_DIM=${VLM_IMAGE_MAX_DIM:-2048}
+      - VLM_SSL_VERIFY=${VLM_SSL_VERIFY:-true}
+      - VLM_CONCURRENCY=${VLM_CONCURRENCY:-8}
+      # --- Document processing ---
+      - SCANNED_PAGE_CHAR_THRESHOLD=${SCANNED_PAGE_CHAR_THRESHOLD:-50}
+      # --- Chunking configuration (NEW) ---
+      - MAX_CHUNK_TOKENS=${MAX_CHUNK_TOKENS:-1024}
+      - SCANNED_PAGE_OVERLAP=${SCANNED_PAGE_OVERLAP:-0.1}
+      # --- Docling pipeline performance (NEW) ---
+      - DOCLING_NUM_THREADS=${DOCLING_NUM_THREADS:-16}
+      - DOCLING_LAYOUT_BATCH=${DOCLING_LAYOUT_BATCH:-8}
+      - DOCLING_TABLE_BATCH=${DOCLING_TABLE_BATCH:-8}
     # NO volume mount on /root/.cache/huggingface — models are baked into the
     # image. Mounting a volume there would shadow them and cause offline errors.
     restart: unless-stopped

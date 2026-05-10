@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 import uvicorn
@@ -20,9 +21,10 @@ from processor import process_document
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    converter, chunker, vlm_config = initialize_models()
+    converter, hybrid_chunker, vlm_config, sem_chunker = initialize_models()
     app.state.doc_converter = converter
-    app.state.chunker       = chunker
+    app.state.hybrid_chunker = hybrid_chunker
+    app.state.sem_chunker = sem_chunker
     app.state.vlm_config    = vlm_config
     yield
 
@@ -40,7 +42,7 @@ app = FastAPI(title="Docling Document Processing Service", lifespan=lifespan)
 
 @app.get("/health")
 async def health_check():
-    if not getattr(app.state, "doc_converter", None) or not getattr(app.state, "chunker", None):
+    if not getattr(app.state, "doc_converter", None) or not getattr(app.state, "hybrid_chunker", None):
         raise HTTPException(status_code=503, detail="Models not initialized")
     return {"status": "ok", "models_loaded": True}
 
@@ -62,6 +64,7 @@ async def process_document_endpoint(
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
+    print(f"Processing file: {file.filename} (doc_id={doc_id})", flush=True)
     suffix      = Path(file.filename).suffix
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
 
@@ -75,15 +78,19 @@ async def process_document_endpoint(
             tmp_path,
             doc_id,
             app.state.doc_converter,
-            app.state.chunker,
+            app.state.hybrid_chunker,
+            app.state.sem_chunker,
             app.state.vlm_config,
         )
 
-        # Debug: save result to file
-        debug_path = f"/tmp/debug_result_{doc_id}.json"
-        with open(debug_path, "w") as f:
-            json.dump(result, f, indent=2, default=str)
-        print(f"[DEBUG] Result saved to: {debug_path}")
+        # Debug: save result to file with timestamp to avoid overwriting
+        # debug_dir = Path("debug_output")
+        # debug_dir.mkdir(exist_ok=True)
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # debug_path = debug_dir / f"{doc_id}_{timestamp}.json"
+        # with open(debug_path, "w") as f:
+        #     json.dump(result, f, indent=2, default=str)
+        # print(f"[DEBUG] Result saved to: {debug_path}")
 
         return JSONResponse(content=result)
 

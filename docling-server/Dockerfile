@@ -36,19 +36,26 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Docling looks for: $DOCLING_ARTIFACTS_PATH/<org>--<repo>/
 ENV DOCLING_ARTIFACTS_PATH=/models
 
-# Download docling models at build time so the image is fully self-contained.
-COPY download_models.py ./
-RUN python3 download_models.py && rm download_models.py
+# Download docling models + E5-instruct tokenizer at build time so the image is
+# fully self-contained. Adds ~1GB but means zero network calls at runtime.
+COPY download_models.py fix_hf_refs.py ./
+RUN python3 download_models.py && \
+    python3 -c "from huggingface_hub import snapshot_download; snapshot_download('intfloat/multilingual-e5-large-instruct', local_dir='/app/e5-tokenizer', allow_patterns=['tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json', 'vocab.txt'])" && \
+    python3 fix_hf_refs.py && \
+    rm download_models.py fix_hf_refs.py
 
-# Disable HuggingFace network access at runtime — everything is baked in.
+# Disable all HuggingFace network access at runtime.
+# Models are baked into the image and refs/main is fixed by fix_hf_refs.py above.
 ENV HF_HUB_OFFLINE=1
 ENV TRANSFORMERS_OFFLINE=1
 
 # Copy application code
-COPY main.py .
-COPY jina-tokenizer ./jina-tokenizer
+COPY src/ ./
 
-RUN python3 -c "from pathlib import Path; assert Path('/app/jina-tokenizer/tokenizer.json').exists(), 'tokenizer.json missing'"
+# Set Python path to find modules
+ENV PYTHONPATH=/app
+
+RUN python3 -c "from pathlib import Path; assert Path('/app/e5-tokenizer/tokenizer.json').exists(), 'e5 tokenizer.json missing'"
 
 EXPOSE 8000
 
