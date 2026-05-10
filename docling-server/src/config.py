@@ -24,7 +24,7 @@ IMAGE_VLM_PROMPT = os.getenv("IMAGE_VLM_PROMPT", "Read all text in this image.")
 # ---------------------------------------------------------------------------
 # Pages with fewer extracted chars than this threshold are treated as
 # scanned / image-only and sent to the VLM as full-page images.
-SCANNED_PAGE_CHAR_THRESHOLD = int(os.getenv("SCANNED_PAGE_CHAR_THRESHOLD", "50"))
+SCANNED_PAGE_CHAR_THRESHOLD = int(os.getenv("SCANNED_PAGE_CHAR_THRESHOLD", "250"))
 
 # Shared chunk size for both HybridChunker (digital PDFs) and semchunk (scanned pages)
 MAX_CHUNK_TOKENS = int(os.getenv("MAX_CHUNK_TOKENS", "1024"))

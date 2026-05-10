@@ -159,8 +159,27 @@ def detect_scanned_pages(doc) -> Set[int]:
     return {pg for pg in pages if page_chars.get(pg, 0) < SCANNED_PAGE_CHAR_THRESHOLD}
 
 
+def is_mostly_english(text: str) -> bool:
+    """Check if text is predominantly English (ASCII Latin letters)."""
+    if not text:
+        return True  # Empty text counts as English
+    
+    # Count Latin letters vs non-Latin scripts
+    latin_alpha = sum(1 for ch in text if ch.isalpha() and ord(ch) < 128)
+    total_alpha = sum(1 for ch in text if ch.isalpha())
+    
+    if total_alpha == 0:
+        return True  # No letters at all, treat as neutral
+    
+    # If less than 70% Latin letters, consider it non-English
+    return (latin_alpha / total_alpha) >= 0.70
+
+
 def analyze_page_text_quality(doc) -> Dict[int, Dict[str, any]]:
     """Analyze text quality per page and return OCR candidates.
+    
+    ALL pages are OCR candidates - native text layer is not trusted.
+    VLM OCR is used for every page.
     
     Returns dict with page_no -> {native_chars, decision, ocr_candidate}
     """
@@ -168,18 +187,15 @@ def analyze_page_text_quality(doc) -> Dict[int, Dict[str, any]]:
     qualities: Dict[int, Dict[str, any]] = {}
     pages = getattr(doc, "pages", {})
 
-    print(f"Page quality: threshold={SCANNED_PAGE_CHAR_THRESHOLD}")
+    print(f"Page quality: ALL pages sent to VLM OCR (native layer bypassed)")
     for pg_no in sorted(pages):
+        text = page_text.get(pg_no, "")
         native_chars = page_chars.get(pg_no, 0)
-        if native_chars < SCANNED_PAGE_CHAR_THRESHOLD:
-            decision = "low_text"
-            ocr_candidate = True
-        elif is_bad_native_text_layer(page_text.get(pg_no, "")):
-            decision = "bad_text_quality"
-            ocr_candidate = True
-        else:
-            decision = "trusted_native"
-            ocr_candidate = False
+        
+        # All pages go to OCR
+        decision = "force_ocr"
+        ocr_candidate = True
+        
         qualities[pg_no] = {
             "page_no": pg_no,
             "native_chars": native_chars,
@@ -188,7 +204,7 @@ def analyze_page_text_quality(doc) -> Dict[int, Dict[str, any]]:
         }
         print(f"  page {pg_no}: chars={native_chars} decision={decision}")
 
-    candidates = [q["page_no"] for q in qualities.values() if q["ocr_candidate"]]
+    candidates = list(pages.keys())
     print(f"Page quality: {len(candidates)}/{len(pages)} page(s) selected for page OCR: {candidates}")
     return qualities
 
