@@ -12,6 +12,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from init_models import initialize_models
+from job_tracker import tracker
 from processor import process_document
 
 
@@ -68,6 +69,7 @@ async def process_document_endpoint(
     suffix      = Path(file.filename).suffix
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
 
+    tracker.start(doc_id, filename=file.filename)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(await file.read())
@@ -81,6 +83,7 @@ async def process_document_endpoint(
             app.state.hybrid_chunker,
             app.state.sem_chunker,
             app.state.vlm_config,
+            tracker.stage_setter(doc_id),
         )
 
         # Debug: save result to file with timestamp to avoid overwriting
@@ -92,19 +95,48 @@ async def process_document_endpoint(
             json.dump(result, f, indent=2, default=str)
         print(f"[DEBUG] Result saved to: {debug_path}")
 
+        tracker.done(doc_id)
         return JSONResponse(content=result)
 
-    except HTTPException:
+    except HTTPException as exc:
+        tracker.fail(doc_id, exc.detail if isinstance(exc.detail, str) else str(exc.detail))
         raise
     except Exception as exc:
         import traceback
         traceback.print_exc()
+        tracker.fail(doc_id, str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         try:
             os.remove(tmp_path)
         except OSError:
             pass
+
+
+@app.get("/status")
+async def get_all_status():
+    """Snapshot of every tracked job (running + recently completed).
+
+    Use this for a dashboard-style view. Entries are pruned
+    STATUS_TTL_SECONDS after they finish (default 1h).
+    """
+    return tracker.all()
+
+
+@app.get("/status/{identifier}")
+async def get_status(identifier: str):
+    """Return the current processing state for a job.
+
+    ``identifier`` can be either the ``doc_id`` or the original ``filename``.
+    If multiple jobs share the same filename, the most recent one is returned.
+
+    States: running | done | failed. 404 if no job matches (or its entry has
+    been pruned after STATUS_TTL_SECONDS).
+    """
+    entry = tracker.find(identifier)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"No job found for '{identifier}'")
+    return entry
 
 
 # ---------------------------------------------------------------------------

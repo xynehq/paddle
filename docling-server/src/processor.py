@@ -24,15 +24,17 @@ def process_document(
     hybrid_chunker,
     sem_chunker: Callable[[str], list[str]],
     vlm_config: Optional[VlmConfig],
+    set_stage: Callable[[str], None] = lambda _stage: None,
 ) -> Dict[str, Any]:
     """Convert a PDF and return structured TOC, text chunks, and images.
-    
+
     Uses HybridChunker for digital PDFs with structure, semchunk for scanned pages.
     Implements page text quality detection to decide between native text vs OCR.
     """
     t0 = time.time()
 
     # ── Conversion ──────────────────────────────────────────────────────────
+    set_stage("docling")
     doc         = doc_converter.convert(file_path).document
     total_pages = len(getattr(doc, "pages", {}))
     print(
@@ -56,6 +58,7 @@ def process_document(
     t1 = time.time()
 
     # Tables are always extracted natively (no VLM needed)
+    set_stage("tables")
     replacements   = extract_tables(doc)
     tables_count   = len(replacements)
 
@@ -75,6 +78,7 @@ def process_document(
 
     if vlm_config:
         # Step 1: OCR candidate pages (full-page)
+        set_stage("vlm_page_ocr")
         page_vlm_results = process_scanned_pages_with_vlm(doc, vlm_config, page_ocr_candidates)
         page_vlm_text = {pg_no: result.text for pg_no, result in page_vlm_results.items()}
         page_ocr_success: Set[int] = set(page_vlm_results.keys())
@@ -96,6 +100,7 @@ def process_document(
             print(f"  page {pg_no}: chars={native_chars} decision=ocr_failed_keep_native original_reason={reason}")
 
         # Step 2: OCR individual pictures (skip pages that had successful page OCR)
+        set_stage("vlm_image_ocr")
         img_replacements, picture_ocr_skipped = process_images_with_vlm(
             doc,
             vlm_config,
@@ -124,6 +129,7 @@ def process_document(
     )
 
     # ── Chunking & images ────────────────────────────────────────────────────
+    set_stage("chunking")
     chunks, chunk_stats = build_chunks(
         doc, replacements, hybrid_chunker,
         sem_chunker=sem_chunker,
