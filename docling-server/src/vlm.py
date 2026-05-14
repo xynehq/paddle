@@ -22,6 +22,7 @@ from config import (
     VLM_PORT,
     VLM_PRESET,
     VLM_SSL_VERIFY,
+    VLM_TEMPERATURE,
     VLM_TIMEOUT,
     VLM_URL,
 )
@@ -168,12 +169,14 @@ def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
     payload = {
         "model":      config.model,
         "max_tokens": config.max_tokens,
-        # temp=0.0 is greedy/deterministic. Empirically produces better
-        # output on low-resource scripts (Devanagari, CJK) than temp=0.2 —
-        # there are fewer valid token alternatives, so any randomness pushes
-        # the model into wrong-character cascades. Loops are handled
+        # Sampling temperature. Default 0.2 via VLM_TEMPERATURE env var.
+        # Note: temp=0.0 is greedy/deterministic and empirically produces
+        # better output on low-resource scripts (Devanagari, CJK) — there
+        # are fewer valid token alternatives, so any randomness pushes the
+        # model into wrong-character cascades. Override VLM_TEMPERATURE=0.0
+        # if running primarily against such scripts. Loops are handled
         # downstream by the post-processor regex, not by sampling noise.
-        "temperature": 0.0,
+        "temperature": VLM_TEMPERATURE,
         # TESTING: frequency_penalty disabled to observe raw model behavior.
         # The regex-based loop detection in _truncate_repetition is the
         # remaining defense layer. Re-enable (0.3-0.5) for production.
