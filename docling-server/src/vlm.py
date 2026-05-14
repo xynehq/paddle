@@ -168,7 +168,16 @@ def call_vlm(config: VlmConfig, img: Image.Image, prompt: str) -> str:
     payload = {
         "model":      config.model,
         "max_tokens": config.max_tokens,
+        # temp=0.0 is greedy/deterministic. Empirically produces better
+        # output on low-resource scripts (Devanagari, CJK) than temp=0.2 —
+        # there are fewer valid token alternatives, so any randomness pushes
+        # the model into wrong-character cascades. Loops are handled
+        # downstream by the post-processor regex, not by sampling noise.
         "temperature": 0.0,
+        # TESTING: frequency_penalty disabled to observe raw model behavior.
+        # The regex-based loop detection in _truncate_repetition is the
+        # remaining defense layer. Re-enable (0.3-0.5) for production.
+        "frequency_penalty": 0.0,
         "messages": [{
             "role": "user",
             "content": [
@@ -208,24 +217,40 @@ def _clean_response(content: Any, prompt: str = "") -> str:
     return _truncate_repetition(text)
 
 
-def _truncate_repetition(text: str, max_repeats: int = 3) -> str:
-    """Detect and truncate two classes of generation loops.
+def _truncate_repetition(text: str) -> str:
+    """Trim generation loops without touching legitimate middle structure.
 
-    1. *Line-level*: the same line appears more than *max_repeats* times.
-    2. *Character-level*: a single character repeated 20+ times consecutively.
+    Two-pass cleanup, regex-only:
+
+      Pass A (single-char runs): collapse 6+ identical characters in a row
+        down to 3. Catches things like ``!!!!!!!`` or ``शशशशशशशश`` —
+        char-level loops the multi-char pass can't see.
+
+      Pass B (contiguous pattern repetition, ANYWHERE in the text):
+        find any substring of length 2–200 that immediately repeats 3+
+        more times and replace the whole run with a single copy.
+        Non-greedy so the *shortest* repeating pattern wins
+        (``ababab`` is recognised as a 2-char loop, not a 4-char one).
+
+    Critically, this is "contiguous *and* exact" — a real table where
+    ``<tr><td>Apple</td></tr>`` is followed by ``<tr><td>Banana</td></tr>``
+    is never matched, because the captured pattern (a full row) does not
+    repeat verbatim. Only pathological loops like
+    ``(मुंबई) (मुंबई) (मुंबई) (मुंबई) (मुंबई)`` get trimmed.
+
+    Defends against three failure modes:
+      • Char-level loops on low-resource scripts (Devanagari, Arabic, …)
+      • Word/phrase loops in the middle of an output (model entered then
+        exited a loop and kept generating)
+      • Tail loops (the original "table truncation" bug)
     """
-    # Collapse long single-char runs (e.g. "!!!!!!!" → "!!!")
-    text = re.sub(r"(.)\1{19,}", lambda m: m.group(1) * 3, text)
+    # Pass A — single-char runs
+    text = re.sub(r"(.)\1{5,}", lambda m: m.group(1) * 3, text)
 
-    # Stop at the first line seen more than max_repeats times
-    counts: Dict[str, int] = {}
-    result: List[str]      = []
-    for line in text.splitlines():
-        key = line.strip()
-        if key:
-            counts[key] = counts.get(key, 0) + 1
-            if counts[key] > max_repeats:
-                break
-        result.append(line)
+    # Pass B — contiguous repeating pattern (anywhere). DOTALL so loops
+    # that cross newlines are caught too (e.g., repeated </tr> on own lines).
+    text = re.sub(r"(.{2,200}?)\1{3,}", r"\1", text, flags=re.DOTALL)
 
-    return "\n".join(result).strip()
+    return text.strip()
+
+

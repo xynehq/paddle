@@ -27,6 +27,20 @@ _LIGHTON_IMAGE_MARKER_RE = re.compile(
 )
 _LIGHTON_IMAGE_TAG_RE = re.compile(r"!\[image\]\([^)]*\)\s*", re.IGNORECASE)
 
+# Permissive marker pattern: catches `![image](...)` followed by ANY
+# comma-separated number list (1-6 numbers, optional brackets). The model
+# occasionally emits 3-number coords (cx,cy,size) instead of the canonical
+# 4-number corners. The strict matcher above misses those, leaving the raw
+# marker text to leak into chunks. This permissive form is used only as a
+# final stripping safety net — never for crop OCR (we don't know what the
+# 3-number format means semantically).
+_LIGHTON_IMAGE_MARKER_LOOSE_RE = re.compile(
+    r"!\[image\]\([^)]*\)\s*"
+    r"(?:\[?\s*-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?){0,5}\s*\]?)?"
+    r"\s*",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Placeholder detection
@@ -67,6 +81,17 @@ def strip_lighton_image_markers(text: str) -> str:
     text = _LIGHTON_IMAGE_MARKER_RE.sub("", text or "")
     text = _LIGHTON_IMAGE_TAG_RE.sub("", text)
     return _normalize_removed_marker_spacing(text)
+
+
+def strip_lighton_image_markers_loose(text: str) -> str:
+    """Aggressively strip ``![image](...)`` + any trailing comma-separated
+    number list from page OCR output. Used as a safety net for markers that
+    escape strict bbox parsing (malformed coord counts, alternate formats).
+    Always safe to call — never alters real prose.
+    """
+    return _normalize_removed_marker_spacing(
+        _LIGHTON_IMAGE_MARKER_LOOSE_RE.sub("", text or "")
+    )
 
 
 def remove_processed_lighton_markers(text: str, regions: List[VlmDetectedImage]) -> str:
@@ -561,6 +586,12 @@ def process_scanned_pages_with_vlm(
 
         for pg_no, regions in successful_regions.items():
             results[pg_no].text = remove_processed_lighton_markers(results[pg_no].text, regions)
+
+    # Safety-net sweep: strip any image markers that escaped strict parsing
+    # (e.g. 3-number coords like `407,835,547`). Without this, malformed
+    # markers leak into the page text and pollute downstream chunks.
+    for pg_no in results:
+        results[pg_no].text = strip_lighton_image_markers_loose(results[pg_no].text)
 
     return results
 

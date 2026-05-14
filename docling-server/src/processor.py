@@ -136,10 +136,16 @@ def process_document(
         page_vlm_text=page_vlm_text,
         suppress_native_pages=suppress_native_pages,
     )
+    # Always extract image pixels for visual elements (signatures, logos,
+    # stamps, charts) regardless of page-OCR status. Previously this skipped
+    # pictures on OCR'd pages, which threw away the actual pixels even though
+    # the page text captured them. Image OCR is decoupled (it stays skipped
+    # via process_images_with_vlm above) — this is only about preserving the
+    # visual artifacts for downstream display / audit / signature verification.
     images, image_extract_skipped = extract_images(
-        doc, replacements, 
+        doc, replacements,
         scanned_pages=set(),
-        skip_pages=suppress_native_pages
+        skip_pages=set()
     )
     if crop_image_chunks:
         print(f"Images: adding {len(crop_image_chunks)} LightOn crop OCR image chunk(s)")
